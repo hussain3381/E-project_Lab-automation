@@ -1,0 +1,19 @@
+# Local credentials and environment settings must never enter GitHub.
+.env
+.env.*.local
+
+# Installed dependencies and local caches.
+node_modules/
+vendor/
+
+# Private runtime output and local backups.
+storage/logs/*
+storage/backups/*
+!storage/logs/.gitkeep
+!storage/backups/.gitkeep
+
+# Operating system/editor files.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

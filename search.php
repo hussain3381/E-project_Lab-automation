@@ -13,6 +13,8 @@ $tester = "";
 $result_filter = "";
 $status = "";
 $testing_date = "";
+$department_filter = "";
+$cycle_filter = "";
 
 
 /* =========================
@@ -30,6 +32,8 @@ if (isset($_GET['search'])) {
     $result_filter = trim($_GET['result'] ?? "");
     $status        = trim($_GET['status'] ?? "");
     $testing_date  = trim($_GET['testing_date'] ?? "");
+    $department_filter = trim($_GET['department_id'] ?? "");
+    $cycle_filter = trim($_GET['cycle_number'] ?? "");
 
 
     $sql = "
@@ -41,28 +45,31 @@ if (isset($_GET['search'])) {
             tests.result,
             tests.status,
             tests.remarks,
+            tests.cycle_number,
+            COALESCE(routed_department.department_name, test_types.department) AS department_name,
 
             products.product_name,
             products.product_code,
             products.product_type,
             products.revision,
+            products.status AS product_status,
+            products.cpri_status,
 
             test_types.test_name,
             test_types.test_code,
 
-            testers.name AS tester_name
+            COALESCE((
+                SELECT GROUP_CONCAT(DISTINCT participant.name ORDER BY participant.name SEPARATOR ', ')
+                FROM test_participants AS participation
+                INNER JOIN testers AS participant ON participant.id = participation.tester_id
+                WHERE participation.test_record_id = tests.id
+            ), testers.name, 'Not Assigned') AS tester_names
 
         FROM tests
-
-        LEFT JOIN products
-            ON tests.product_id = products.product_id
-
-        LEFT JOIN test_types
-            ON tests.test_type_id = test_types.id
-
-        LEFT JOIN testers
-            ON tests.tester_id = testers.id
-
+        LEFT JOIN products ON tests.product_id = products.product_id
+        LEFT JOIN test_types ON tests.test_type_id = test_types.id
+        LEFT JOIN departments AS routed_department ON tests.department_id = routed_department.id
+        LEFT JOIN testers ON tests.tester_id = testers.id
         WHERE 1=1
     ";
 
@@ -110,10 +117,25 @@ if (isset($_GET['search'])) {
     }
 
 
-    /* Tester */
+    /* Tester: include any named participant as well as the legacy lead-tester field. */
     if ($tester != "") {
-        $sql .= " AND tests.tester_id = ?";
+        $sql .= " AND (tests.tester_id = ? OR EXISTS (SELECT 1 FROM test_participants AS tp WHERE tp.test_record_id = tests.id AND tp.tester_id = ?))";
         $params[] = $tester;
+        $params[] = $tester;
+        $types .= "ii";
+    }
+
+    /* Routed department */
+    if ($department_filter !== '' && ctype_digit($department_filter)) {
+        $sql .= " AND COALESCE(tests.department_id, test_types.department_id) = ?";
+        $params[] = (int) $department_filter;
+        $types .= "i";
+    }
+
+    /* Re-manufacture/retest cycle */
+    if ($cycle_filter !== '' && ctype_digit($cycle_filter)) {
+        $sql .= " AND tests.cycle_number = ?";
+        $params[] = (int) $cycle_filter;
         $types .= "i";
     }
 
@@ -182,9 +204,12 @@ $test_types = mysqli_query(
 
 $testers = mysqli_query(
     $conn,
-    "SELECT id, name
-     FROM testers
-     ORDER BY name ASC"
+    "SELECT id, name FROM testers WHERE is_active = 1 ORDER BY name ASC"
+);
+
+$departments = mysqli_query(
+    $conn,
+    "SELECT id, department_name FROM departments WHERE is_active = 1 ORDER BY department_name ASC"
 );
 
 ?>
@@ -193,6 +218,9 @@ $testers = mysqli_query(
 <html lang="en">
 
 <head>
+    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
+    <link rel="stylesheet" href="assets/compiled/app.css">
+    <script type="module" src="assets/compiled/app.js"></script>
 
 <meta charset="UTF-8">
 
@@ -213,860 +241,7 @@ $testers = mysqli_query(
       rel="stylesheet">
 
 
-<style>
-
-/* =========================
-   RESET
-========================= */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-
-/* =========================
-   BODY
-========================= */
-
-body {
-
-    font-family: "Inter", sans-serif;
-
-    background:
-        radial-gradient(
-            circle at top right,
-            rgba(72, 215, 196, 0.045),
-            transparent 30%
-        ),
-        #071014;
-
-    color: #e7f8f5;
-
-    min-height: 100vh;
-}
-
-
-/* =========================
-   SIDEBAR
-========================= */
-
-.sidebar {
-
-    position: fixed;
-
-    left: 0;
-    top: 0;
-
-    width: 245px;
-    height: 100vh;
-
-    background: #09171b;
-
-    border-right:
-        1px solid rgba(255,255,255,0.05);
-
-    padding: 24px 16px;
-
-    z-index: 100;
-
-    display: flex;
-    flex-direction: column;
-}
-
-
-/* =========================
-   BRAND
-========================= */
-
-.brand {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 11px;
-
-    padding: 0 9px 24px;
-
-    border-bottom:
-        1px solid rgba(255,255,255,0.05);
-
-    margin-bottom: 22px;
-}
-
-
-.brand-icon {
-
-    width: 38px;
-    height: 38px;
-
-    border-radius: 10px;
-
-    background:
-        rgba(72,215,196,0.10);
-
-    border:
-        1px solid rgba(72,215,196,0.16);
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    color: #48d7c4;
-
-    font-size: 19px;
-}
-
-
-.brand-text {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 16px;
-
-    font-weight: 700;
-
-    color: #eefcf9;
-
-    letter-spacing: 0.5px;
-}
-
-
-.brand-subtitle {
-
-    color: #607678;
-
-    font-size: 9px;
-
-    margin-top: 3px;
-
-    text-transform: uppercase;
-
-    letter-spacing: 1.2px;
-}
-
-
-/* =========================
-   NAV TITLE
-========================= */
-
-.nav-title {
-
-    color: #506769;
-
-    font-size: 9px;
-
-    font-weight: 700;
-
-    text-transform: uppercase;
-
-    letter-spacing: 1.4px;
-
-    padding: 0 10px;
-
-    margin-bottom: 9px;
-}
-
-
-/* =========================
-   NAVIGATION
-========================= */
-
-.nav {
-
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 4px;
-}
-
-
-.nav-link {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 11px;
-
-    text-decoration: none;
-
-    color: #829799;
-
-    padding: 10px 11px;
-
-    border-radius: 9px;
-
-    font-size: 12px;
-
-    font-weight: 500;
-
-    border:
-        1px solid transparent;
-
-    transition: 0.2s;
-
-    position: relative;
-}
-
-
-.nav-icon {
-
-    width: 20px;
-
-    text-align: center;
-
-    font-size: 15px;
-
-    opacity: 0.9;
-}
-
-
-.nav-link:hover {
-
-    color: #d9efeb;
-
-    background:
-        rgba(72,215,196,0.06);
-}
-
-
-.nav-link.active {
-
-    color: #48d7c4;
-
-    background:
-        rgba(72,215,196,0.09);
-
-    border:
-        1px solid rgba(72,215,196,0.10);
-}
-
-
-.nav-link.active::before {
-
-    content: "";
-
-    position: absolute;
-
-    left: -1px;
-
-    top: 8px;
-
-    bottom: 8px;
-
-    width: 2px;
-
-    border-radius: 2px;
-
-    background: #48d7c4;
-}
-
-
-/* =========================
-   SIDEBAR BOTTOM
-========================= */
-
-.sidebar-bottom {
-
-    margin-top: auto;
-
-    padding-top: 16px;
-
-    border-top:
-        1px solid rgba(255,255,255,0.05);
-}
-
-
-.user-box {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 10px;
-
-    padding: 9px 8px;
-}
-
-
-.user-avatar {
-
-    width: 32px;
-    height: 32px;
-
-    border-radius: 50%;
-
-    background: #48d7c4;
-
-    color: #061110;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    font-size: 12px;
-
-    font-weight: 800;
-}
-
-
-.user-info strong {
-
-    display: block;
-
-    color: #dcefed;
-
-    font-size: 11px;
-}
-
-
-.user-info span {
-
-    display: block;
-
-    color: #5f7779;
-
-    font-size: 9px;
-
-    margin-top: 2px;
-}
-
-
-/* =========================
-   MAIN
-========================= */
-
-.main {
-
-    margin-left: 245px;
-
-    padding: 30px 35px;
-
-    min-height: 100vh;
-}
-
-
-/* =========================
-   HEADER
-========================= */
-
-.header {
-
-    margin-bottom: 25px;
-}
-
-
-.header h1 {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 29px;
-
-    font-weight: 700;
-
-    color: #edf9f7;
-
-    margin-bottom: 6px;
-}
-
-
-.header p {
-
-    color: #62797b;
-
-    font-size: 12px;
-}
-
-
-/* =========================
-   SEARCH CARD
-========================= */
-
-.search-card {
-
-    background: #0b1a1e;
-
-    border:
-        1px solid rgba(255,255,255,0.055);
-
-    border-radius: 15px;
-
-    padding: 24px;
-
-    margin-bottom: 22px;
-}
-
-
-.search-title {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 18px;
-
-    color: #eaf8f5;
-
-    margin-bottom: 21px;
-}
-
-
-.form-grid {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(3, 1fr);
-
-    gap: 17px;
-}
-
-
-.field {
-
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 7px;
-}
-
-
-.field label {
-
-    color: #849b9d;
-
-    font-size: 11px;
-
-    font-weight: 600;
-}
-
-
-.field input,
-.field select {
-
-    width: 100%;
-
-    padding: 11px 12px;
-
-    background: #071014;
-
-    color: #e4f4f1;
-
-    border:
-        1px solid rgba(255,255,255,0.08);
-
-    border-radius: 8px;
-
-    outline: none;
-
-    font-family: "Inter", sans-serif;
-
-    font-size: 12px;
-}
-
-
-.field input::placeholder {
-
-    color: #4f6668;
-}
-
-
-.field input:focus,
-.field select:focus {
-
-    border-color: #48d7c4;
-
-    box-shadow:
-        0 0 0 3px
-        rgba(72,215,196,0.07);
-}
-
-
-/* SELECT OPTION */
-
-.field select option {
-
-    background: #0b1a1e;
-
-    color: #e4f4f1;
-}
-
-
-/* =========================
-   BUTTONS
-========================= */
-
-.buttons {
-
-    display: flex;
-
-    gap: 10px;
-
-    margin-top: 21px;
-}
-
-
-.search-btn {
-
-    background: #48d7c4;
-
-    color: #061110;
-
-    border: none;
-
-    padding: 11px 20px;
-
-    border-radius: 8px;
-
-    font-size: 12px;
-
-    font-weight: 700;
-
-    cursor: pointer;
-
-    transition: 0.2s;
-}
-
-
-.search-btn:hover {
-
-    background: #65e3d3;
-}
-
-
-.reset-btn {
-
-    background: transparent;
-
-    color: #829799;
-
-    border:
-        1px solid rgba(255,255,255,0.09);
-
-    padding: 10px 20px;
-
-    border-radius: 8px;
-
-    text-decoration: none;
-
-    font-size: 12px;
-
-    transition: 0.2s;
-}
-
-
-.reset-btn:hover {
-
-    color: #48d7c4;
-
-    border-color:
-        rgba(72,215,196,0.35);
-}
-
-
-/* =========================
-   RESULTS
-========================= */
-
-.results-card {
-
-    background: #0b1a1e;
-
-    border:
-        1px solid rgba(255,255,255,0.055);
-
-    border-radius: 15px;
-
-    overflow: hidden;
-}
-
-
-.results-header {
-
-    padding: 20px 23px;
-
-    border-bottom:
-        1px solid rgba(255,255,255,0.05);
-}
-
-
-.results-header h2 {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 18px;
-
-    color: #eaf8f5;
-}
-
-
-/* =========================
-   TABLE
-========================= */
-
-.table-wrapper {
-
-    overflow-x: auto;
-}
-
-
-table {
-
-    width: 100%;
-
-    border-collapse: collapse;
-
-    min-width: 1050px;
-}
-
-
-th {
-
-    text-align: left;
-
-    padding: 14px 17px;
-
-    color: #637a7c;
-
-    font-size: 10px;
-
-    text-transform: uppercase;
-
-    letter-spacing: 0.7px;
-
-    background: #09171b;
-
-    white-space: nowrap;
-}
-
-
-td {
-
-    padding: 14px 17px;
-
-    border-top:
-        1px solid rgba(255,255,255,0.045);
-
-    color: #b9ccca;
-
-    font-size: 12px;
-
-    white-space: nowrap;
-}
-
-
-tr:hover td {
-
-    background:
-        rgba(72,215,196,0.025);
-}
-
-
-.id-text {
-
-    color: #48d7c4;
-
-    font-weight: 600;
-}
-
-
-.product-name {
-
-    color: #edf9f7;
-
-    font-weight: 600;
-}
-
-
-/* =========================
-   BADGES
-========================= */
-
-.badge {
-
-    display: inline-block;
-
-    padding: 5px 9px;
-
-    border-radius: 20px;
-
-    font-size: 9px;
-
-    font-weight: 700;
-}
-
-
-.pass {
-
-    color: #5ee8ce;
-
-    background:
-        rgba(72,215,196,0.10);
-}
-
-
-.fail {
-
-    color: #ff8b8b;
-
-    background:
-        rgba(255,80,80,0.10);
-}
-
-
-.pending {
-
-    color: #f3ca73;
-
-    background:
-        rgba(243,202,115,0.10);
-}
-
-
-/* =========================
-   VIEW BUTTON
-========================= */
-
-.view-btn {
-
-    text-decoration: none;
-
-    color: #48d7c4;
-
-    border:
-        1px solid rgba(72,215,196,0.22);
-
-    padding: 6px 10px;
-
-    border-radius: 7px;
-
-    font-size: 11px;
-
-    transition: 0.2s;
-}
-
-
-.view-btn:hover {
-
-    background:
-        rgba(72,215,196,0.08);
-}
-
-
-/* =========================
-   EMPTY
-========================= */
-
-.empty {
-
-    text-align: center;
-
-    padding: 40px !important;
-
-    color: #617779;
-
-    font-size: 12px;
-}
-
-
-/* =========================
-   SCROLLBAR
-========================= */
-
-::-webkit-scrollbar {
-
-    width: 7px;
-    height: 7px;
-}
-
-
-::-webkit-scrollbar-track {
-
-    background: #071014;
-}
-
-
-::-webkit-scrollbar-thumb {
-
-    background: #1b3b3d;
-
-    border-radius: 10px;
-}
-
-
-::-webkit-scrollbar-thumb:hover {
-
-    background: #2c5b5c;
-}
-
-
-/* =========================
-   RESPONSIVE
-========================= */
-
-@media (max-width: 1100px) {
-
-    .form-grid {
-
-        grid-template-columns:
-            repeat(2, 1fr);
-    }
-}
-
-
-@media (max-width: 850px) {
-
-    .sidebar {
-
-        width: 210px;
-    }
-
-    .main {
-
-        margin-left: 210px;
-
-        padding: 25px;
-    }
-}
-
-
-@media (max-width: 700px) {
-
-    .sidebar {
-
-        position: relative;
-
-        width: 100%;
-
-        height: auto;
-
-        min-height: auto;
-    }
-
-    .main {
-
-        margin-left: 0;
-
-        padding: 20px;
-    }
-
-    .form-grid {
-
-        grid-template-columns: 1fr;
-    }
-
-    .sidebar-bottom {
-
-        margin-top: 20px;
-    }
-}
-
-</style>
+<link rel="stylesheet" href="assets/css/pages/search.css">
 
 </head>
 
@@ -1381,6 +556,23 @@ tr:hover td {
                 </div>
 
 
+                <!-- Department -->
+                <div class="field">
+                    <label>Routed Department</label>
+                    <select name="department_id">
+                        <option value="">All Departments</option>
+                        <?php if ($departments): while ($department_row = mysqli_fetch_assoc($departments)): ?>
+                            <option value="<?php echo (int) $department_row['id']; ?>" <?php echo $department_filter == $department_row['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($department_row['department_name'], ENT_QUOTES, 'UTF-8'); ?></option>
+                        <?php endwhile; endif; ?>
+                    </select>
+                </div>
+
+                <!-- Test cycle -->
+                <div class="field">
+                    <label>Test Cycle</label>
+                    <input type="number" name="cycle_number" min="1" max="999" placeholder="e.g. 2" value="<?php echo htmlspecialchars($cycle_filter, ENT_QUOTES, 'UTF-8'); ?>">
+                </div>
+
                 <!-- Tester -->
 
                 <div class="field">
@@ -1620,7 +812,11 @@ tr:hover td {
 
                         <th>Test Type</th>
 
-                        <th>Tester</th>
+                        <th>Department</th>
+
+                        <th>Cycle</th>
+
+                        <th>Tester(s)</th>
 
                         <th>Date</th>
 
@@ -1721,15 +917,11 @@ tr:hover td {
                         </td>
 
 
-                        <td>
+                        <td><?php echo htmlspecialchars((string) ($row['department_name'] ?? 'Unassigned'), ENT_QUOTES, 'UTF-8'); ?></td>
 
-                            <?php
-                            echo htmlspecialchars(
-                                $row['tester_name'] ?: "—"
-                            );
-                            ?>
+                        <td><?php echo (int) ($row['cycle_number'] ?? 1); ?></td>
 
-                        </td>
+                        <td><?php echo htmlspecialchars((string) ($row['tester_names'] ?? 'Not Assigned'), ENT_QUOTES, 'UTF-8'); ?></td>
 
 
                         <td>
@@ -1794,7 +986,7 @@ tr:hover td {
                     <tr>
 
                         <td
-                            colspan="10"
+                            colspan="12"
                             class="empty"
                         >
 

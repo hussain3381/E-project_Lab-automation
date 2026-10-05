@@ -1,0 +1,12 @@
+# Prevent directory listings and direct access to configuration, source logic, and private files.
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(?:config|controllers|models|views|database|tests|scripts|docs|resources|storage)(?:/|$) - [F,L,NC]
+    RewriteRule ^\.env(?:\..*)?$ - [F,L,NC]
+</IfModule>
+
+<FilesMatch "^(?:\.env(?:\..*)?|\.git|README\.md|vite\.config\.js|composer\.(?:json|lock)|package(?:-lock)?\.json)$">
+    Require all denied
+</FilesMatch>

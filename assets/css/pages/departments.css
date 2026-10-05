@@ -1,0 +1,25 @@
+/* Department setup page uses shared palette tokens. */
+.departments-page { min-height: 100vh; padding: 76px 24px 32px; background: var(--theme-bg); color: var(--theme-text); font-family: system-ui, sans-serif; }
+.departments-shell { width: min(900px, 100%); margin: 0 auto; display: grid; gap: 18px; }
+.departments-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.departments-header h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.03em; }
+.departments-header p:not(.departments-eyebrow) { color: var(--theme-muted); line-height: 1.55; }
+.departments-header a { color: var(--theme-accent); font-weight: 700; text-decoration: none; }
+.departments-header a:hover { text-decoration: underline; }
+.departments-eyebrow { margin: 0 0 8px; color: var(--theme-accent); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.departments-card { padding: 22px; border: 1px solid var(--theme-border); border-radius: 18px; background: var(--theme-surface); box-shadow: 0 14px 32px var(--theme-shadow); }
+.departments-card h2 { margin: 0 0 16px; font-size: 19px; }
+.departments-card form { display: grid; gap: 9px; max-width: 560px; }
+.departments-card label { margin-top: 6px; color: var(--theme-muted); font-size: 12px; font-weight: 700; }
+.departments-card input { padding: 11px 12px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-bg); color: var(--theme-text); font: inherit; }
+.departments-card input:focus { outline: 2px solid var(--theme-focus); outline-offset: 1px; }
+.departments-card button { margin-top: 8px; padding: 11px 14px; border: 0; border-radius: 9px; background: var(--theme-accent); color: var(--theme-accent-text); font: 700 13px/1.2 system-ui, sans-serif; cursor: pointer; }
+.departments-table-wrap { overflow-x: auto; border: 1px solid var(--theme-border); border-radius: 10px; }
+.departments-table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.departments-table-wrap th, .departments-table-wrap td { padding: 11px 12px; border-bottom: 1px solid var(--theme-border); text-align: left; }
+.departments-table-wrap th { color: var(--theme-accent); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.departments-table-wrap tr:last-child td { border-bottom: 0; }
+.departments-alert { padding: 13px 15px; border: 1px solid var(--theme-border); border-radius: 11px; background: var(--theme-surface); }
+.departments-alert--success { border-color: var(--theme-success); color: var(--theme-success); }
+.departments-alert--error { border-color: var(--theme-danger); color: var(--theme-danger); }
+@media (max-width: 560px) { .departments-page { padding: 66px 14px 20px; } .departments-header { flex-direction: column; } .departments-card { padding: 17px; } }
