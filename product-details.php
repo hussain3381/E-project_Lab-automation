@@ -29,12 +29,17 @@ $history_stmt = mysqli_prepare(
         tests.*,
         test_types.test_name,
         test_types.test_code,
-        testers.name AS tester_name
+        COALESCE(routed_department.department_name, test_types.department) AS department_name,
+        COALESCE((
+            SELECT GROUP_CONCAT(DISTINCT participant.name ORDER BY participant.name SEPARATOR ', ')
+            FROM test_participants AS participation
+            INNER JOIN testers AS participant ON participant.id = participation.tester_id
+            WHERE participation.test_record_id = tests.id
+        ), testers.name, 'Not Assigned') AS tester_names
      FROM tests
-     LEFT JOIN test_types
-        ON tests.test_type_id = test_types.id
-     LEFT JOIN testers
-        ON tests.tester_id = testers.id
+     LEFT JOIN test_types ON tests.test_type_id = test_types.id
+     LEFT JOIN departments AS routed_department ON tests.department_id = routed_department.id
+     LEFT JOIN testers ON tests.tester_id = testers.id
      WHERE tests.product_id = ?
      ORDER BY tests.id DESC"
 );
@@ -46,14 +51,24 @@ mysqli_stmt_bind_param(
 );
 
 mysqli_stmt_execute($history_stmt);
-
 $history = mysqli_stmt_get_result($history_stmt);
+
+$event_stmt = $conn->prepare(
+    'SELECT event_type, old_status, new_status, notes, changed_by, changed_at ' .
+    'FROM product_workflow_events WHERE product_id = ? ORDER BY id DESC'
+);
+$event_stmt->bind_param('s', $product['product_id']);
+$event_stmt->execute();
+$workflowEvents = $event_stmt->get_result();
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
+    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
+    <link rel="stylesheet" href="assets/compiled/app.css">
+    <script type="module" src="assets/compiled/app.js"></script>
 
     <meta charset="UTF-8">
 
@@ -63,388 +78,7 @@ $history = mysqli_stmt_get_result($history_stmt);
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 
-    <style>
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #071111;
-            color: #e9ffff;
-            min-height: 100vh;
-        }
-
-        /* SIDEBAR */
-
-        .sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 245px;
-            height: 100vh;
-            background: #0b1718;
-            border-right: 1px solid rgba(76,255,218,0.12);
-            padding: 28px 18px;
-        }
-
-        .logo {
-            padding: 0 12px 28px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 25px;
-        }
-
-        .logo h1 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 21px;
-            letter-spacing: 1px;
-        }
-
-        .logo span {
-            color: #4cffda;
-        }
-
-        .logo p {
-            font-size: 11px;
-            color: #759090;
-            margin-top: 6px;
-        }
-
-        .nav-title {
-            font-size: 10px;
-            color: #5e7777;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin: 20px 12px 10px;
-        }
-
-        .nav a {
-            display: block;
-            text-decoration: none;
-            color: #8fa6a6;
-            padding: 12px 13px;
-            margin: 5px 0;
-            border-radius: 9px;
-            font-size: 13px;
-            transition: 0.25s;
-        }
-
-        .nav a:hover,
-        .nav a.active {
-            background: rgba(76,255,218,0.08);
-            color: #4cffda;
-        }
-
-        /* MAIN */
-
-        .main {
-            margin-left: 245px;
-            padding: 35px;
-        }
-
-        .top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 28px;
-        }
-
-        .top h2 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 27px;
-        }
-
-        .top p {
-            color: #718989;
-            font-size: 13px;
-            margin-top: 6px;
-        }
-
-        .back-btn {
-            text-decoration: none;
-            color: #4cffda;
-            border: 1px solid rgba(76,255,218,0.20);
-            padding: 10px 16px;
-            border-radius: 8px;
-            font-size: 13px;
-        }
-
-        .back-btn:hover {
-            background: rgba(76,255,218,0.08);
-        }
-
-        /* PRODUCT HEADER */
-
-        .product-header {
-            background: linear-gradient(
-                135deg,
-                #0d2021,
-                #0b1819
-            );
-
-            border: 1px solid rgba(76,255,218,0.14);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 22px;
-
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .product-title {
-            display: flex;
-            align-items: center;
-            gap: 18px;
-        }
-
-        .product-icon {
-            width: 58px;
-            height: 58px;
-            border-radius: 12px;
-            background: rgba(76,255,218,0.08);
-            border: 1px solid rgba(76,255,218,0.15);
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-size: 25px;
-        }
-
-        .product-title h1 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 22px;
-        }
-
-        .product-title p {
-            color: #4cffda;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-
-        .status {
-            padding: 8px 14px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        .pending {
-            color: #f5c86b;
-            background: rgba(245,200,107,0.08);
-            border: 1px solid rgba(245,200,107,0.15);
-        }
-
-        .pass {
-            color: #6ff0b5;
-            background: rgba(48,220,150,0.08);
-            border: 1px solid rgba(48,220,150,0.15);
-        }
-
-        .fail {
-            color: #ff8989;
-            background: rgba(255,80,80,0.08);
-            border: 1px solid rgba(255,80,80,0.15);
-        }
-
-        /* CARDS */
-
-        .card {
-            background: #0c1a1b;
-            border: 1px solid rgba(76,255,218,0.11);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 22px;
-        }
-
-        .card-title {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 16px;
-            margin-bottom: 22px;
-        }
-
-        .card-title span {
-            color: #4cffda;
-        }
-
-        /* DETAILS GRID */
-
-        .details-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 18px;
-        }
-
-        .detail {
-            background: #091516;
-            border: 1px solid rgba(255,255,255,0.06);
-            padding: 16px;
-            border-radius: 9px;
-        }
-
-        .detail label {
-            display: block;
-            color: #627979;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 7px;
-        }
-
-        .detail-value {
-            color: #d9eeee;
-            font-size: 13px;
-            font-weight: 500;
-            word-break: break-word;
-        }
-
-        .product-id {
-            color: #4cffda;
-            font-weight: 600;
-        }
-
-        .description {
-            margin-top: 18px;
-            background: #091516;
-            border: 1px solid rgba(255,255,255,0.06);
-            padding: 18px;
-            border-radius: 9px;
-        }
-
-        .description label {
-            color: #627979;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
-
-        .description p {
-            color: #a6baba;
-            font-size: 13px;
-            line-height: 1.7;
-            margin-top: 8px;
-        }
-
-        /* TEST HISTORY */
-
-        .table-wrapper {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 850px;
-        }
-
-        th {
-            text-align: left;
-            padding: 14px;
-            background: #091516;
-            color: #627979;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
-
-        td {
-            padding: 15px 14px;
-            border-top: 1px solid rgba(255,255,255,0.05);
-            color: #a7baba;
-            font-size: 12px;
-        }
-
-        tr:hover td {
-            background: rgba(76,255,218,0.025);
-        }
-
-        .test-id {
-            color: #4cffda;
-            font-weight: 600;
-        }
-
-        .result-pass {
-            color: #6ff0b5;
-        }
-
-        .result-fail {
-            color: #ff8989;
-        }
-
-        .result-pending {
-            color: #f5c86b;
-        }
-
-        .empty {
-            text-align: center;
-            padding: 45px 20px;
-            color: #718989;
-            font-size: 13px;
-        }
-
-        .empty-icon {
-            font-size: 30px;
-            margin-bottom: 12px;
-        }
-
-        /* RESPONSIVE */
-
-        @media (max-width: 950px) {
-
-            .details-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-        }
-
-        @media (max-width: 850px) {
-
-            .sidebar {
-                width: 190px;
-            }
-
-            .main {
-                margin-left: 190px;
-                padding: 25px;
-            }
-
-        }
-
-        @media (max-width: 650px) {
-
-            .sidebar {
-                position: relative;
-                width: 100%;
-                height: auto;
-            }
-
-            .main {
-                margin-left: 0;
-            }
-
-            .top {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-
-            .product-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 18px;
-            }
-
-            .details-grid {
-                grid-template-columns: 1fr;
-            }
-
-        }
-
-    </style>
+    <link rel="stylesheet" href="assets/css/pages/product-details.css">
 
 </head>
 
@@ -577,11 +211,11 @@ $history = mysqli_stmt_get_result($history_stmt);
 
         $status_class = "pending";
 
-        if ($status == "Passed") {
+        if (in_array($status, ["Passed", "CPRI Ready", "Handed to CPRI"], true)) {
             $status_class = "pass";
         }
 
-        if ($status == "Failed") {
+        if (str_contains($status, "Failed")) {
             $status_class = "fail";
         }
 
@@ -733,15 +367,20 @@ $history = mysqli_stmt_get_result($history_stmt);
                 <label>Current Status</label>
 
                 <div class="detail-value">
-
-                    <?php
-                    echo htmlspecialchars($product['status']);
-                    ?>
-
+                    <?php echo htmlspecialchars($product['status'], ENT_QUOTES, 'UTF-8'); ?>
                 </div>
 
             </div>
 
+            <div class="detail">
+                <label>Next Test Cycle</label>
+                <div class="detail-value"><?php echo (int) ($product['rework_cycle'] ?? 0) + 1; ?></div>
+            </div>
+
+            <div class="detail">
+                <label>CPRI Handoff Status</label>
+                <div class="detail-value"><?php echo htmlspecialchars((string) ($product['cpri_status'] ?? 'Not Ready'), ENT_QUOTES, 'UTF-8'); ?></div>
+            </div>
 
         </div>
 
@@ -798,7 +437,11 @@ $history = mysqli_stmt_get_result($history_stmt);
 
                             <th>Test Type</th>
 
-                            <th>Tester</th>
+                            <th>Department</th>
+
+                            <th>Cycle</th>
+
+                            <th>Tester(s)</th>
 
                             <th>Date</th>
 
@@ -818,15 +461,9 @@ $history = mysqli_stmt_get_result($history_stmt);
                             <tr>
 
                                 <td>
-
-                                    <span class="test-id">
-
-                                        <?php
-                                        echo htmlspecialchars($test['test_id']);
-                                        ?>
-
-                                    </span>
-
+                                    <a class="test-id" href="test-details.php?id=<?php echo (int) $test['id']; ?>">
+                                        <?php echo htmlspecialchars($test['test_id'], ENT_QUOTES, 'UTF-8'); ?>
+                                    </a>
                                 </td>
 
 
@@ -841,15 +478,11 @@ $history = mysqli_stmt_get_result($history_stmt);
                                 </td>
 
 
-                                <td>
+                                <td><?php echo htmlspecialchars((string) ($test['department_name'] ?? 'Unassigned'), ENT_QUOTES, 'UTF-8'); ?></td>
 
-                                    <?php
-                                    echo htmlspecialchars(
-                                        $test['tester_name'] ?? 'Not Assigned'
-                                    );
-                                    ?>
+                                <td><?php echo (int) ($test['cycle_number'] ?? 1); ?></td>
 
-                                </td>
+                                <td><?php echo htmlspecialchars((string) ($test['tester_names'] ?? 'Not Assigned'), ENT_QUOTES, 'UTF-8'); ?></td>
 
 
                                 <td>
@@ -926,6 +559,30 @@ $history = mysqli_stmt_get_result($history_stmt);
 
     </div>
 
+    <!-- WORKFLOW EVENTS: re-manufacture release and manual external CPRI handoff audit. -->
+    <div class="card">
+        <div class="card-title">Product <span>Workflow Events</span></div>
+        <div class="table-wrapper">
+            <?php if ($workflowEvents->num_rows > 0): ?>
+                <table>
+                    <thead><tr><th>Event</th><th>Status change</th><th>Notes</th><th>Recorded by</th><th>Date</th></tr></thead>
+                    <tbody>
+                    <?php while ($event = $workflowEvents->fetch_assoc()): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($event['event_type'] === 'CPRI_HANDOFF' ? 'CPRI handoff' : 'Re-manufacture release', ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo htmlspecialchars((string) ($event['old_status'] ?? '—') . ' → ' . $event['new_status'], ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo nl2br(htmlspecialchars((string) ($event['notes'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></td>
+                            <td><?php echo htmlspecialchars($event['changed_by'], ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo htmlspecialchars($event['changed_at'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        </tr>
+                    <?php endwhile; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <div class="empty"><p>No re-manufacture or CPRI workflow events recorded.</p></div>
+            <?php endif; ?>
+        </div>
+    </div>
 
 </main>
 

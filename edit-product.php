@@ -1,123 +1,60 @@
 <?php
+// Keep generated identity and workflow status immutable on the generic edit form.
+declare(strict_types=1);
 
-include "db.php";
+require_once __DIR__ . "/db.php";
+require_roles(['Administrator', 'Lab Manager']);
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-    die("Invalid product request.");
+    http_response_code(400);
+    exit("Invalid product request.");
 }
 
-$id = intval($_GET['id']);
-
+$id = (int) $_GET['id'];
 $message = "";
 $message_type = "";
 
-/* =========================
-   UPDATE PRODUCT
-========================= */
+if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST") {
+    $product_name = trim((string) ($_POST['product_name'] ?? ''));
+    $manufacturing_date = trim((string) ($_POST['manufacturing_date'] ?? ''));
+    $description = trim((string) ($_POST['description'] ?? ''));
+    $dateValue = DateTime::createFromFormat('!Y-m-d', $manufacturing_date);
+    $validDate = $dateValue !== false && $dateValue->format('Y-m-d') === $manufacturing_date;
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-
-    $product_code = trim($_POST['product_code']);
-    $product_name = trim($_POST['product_name']);
-    $product_type = trim($_POST['product_type']);
-    $revision = trim($_POST['revision']);
-    $manufacturing_number = trim($_POST['manufacturing_number']);
-    $manufacturing_date = $_POST['manufacturing_date'];
-    $description = trim($_POST['description']);
-    $status = $_POST['status'];
-
-    if (
-        empty($product_code) ||
-        empty($product_name) ||
-        empty($manufacturing_number)
-    ) {
-
-        $message = "Please fill all required fields.";
+    if ($product_name === '' || strlen($product_name) > 180 || !$validDate) {
+        $message = "Enter a product name and a valid manufacturing date.";
         $message_type = "error";
-
     } else {
-
-        $sql = "UPDATE products SET
-                product_code = ?,
-                product_name = ?,
-                product_type = ?,
-                revision = ?,
-                manufacturing_number = ?,
-                manufacturing_date = ?,
-                description = ?,
-                status = ?
-                WHERE id = ?";
-
-        $stmt = mysqli_prepare($conn, $sql);
-
-        if ($stmt) {
-
-            mysqli_stmt_bind_param(
-                $stmt,
-                "ssssssssi",
-                $product_code,
-                $product_name,
-                $product_type,
-                $revision,
-                $manufacturing_number,
-                $manufacturing_date,
-                $description,
-                $status,
-                $id
-            );
-
-            if (mysqli_stmt_execute($stmt)) {
-
-                $message = "Product updated successfully!";
-                $message_type = "success";
-
-            } else {
-
-                $message = "Error updating product: " . mysqli_stmt_error($stmt);
-                $message_type = "error";
-            }
-
-            mysqli_stmt_close($stmt);
-
-        } else {
-
-            $message = "Database error: " . mysqli_error($conn);
-            $message_type = "error";
-        }
+        $stmt = $conn->prepare(
+            "UPDATE products SET product_name = ?, manufacturing_date = ?, description = ? WHERE id = ?"
+        );
+        $stmt->bind_param('sssi', $product_name, $manufacturing_date, $description, $id);
+        $stmt->execute();
+        $stmt->close();
+        $message = "Product details updated. Generated identity and workflow status were not changed.";
+        $message_type = "success";
     }
 }
 
-
-/* =========================
-   GET PRODUCT DATA
-========================= */
-
-$sql = "SELECT * FROM products WHERE id = ?";
-
-$stmt = mysqli_prepare($conn, $sql);
-
-if (!$stmt) {
-    die("Database error: " . mysqli_error($conn));
-}
-
-mysqli_stmt_bind_param($stmt, "i", $id);
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-$product = mysqli_fetch_assoc($result);
+$stmt = $conn->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
+$stmt->bind_param('i', $id);
+$stmt->execute();
+$product = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 if (!$product) {
-    die("Product not found.");
+    http_response_code(404);
+    exit("Product not found.");
 }
-
 ?>
-
 <!DOCTYPE html>
 
 <html lang="en">
 
 <head>
+    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
+    <link rel="stylesheet" href="assets/compiled/app.css">
+    <script type="module" src="assets/compiled/app.js"></script>
 
 <meta charset="UTF-8">
 
@@ -127,331 +64,7 @@ if (!$product) {
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 
-<style>
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Inter', sans-serif;
-    background: #071417;
-    color: #e8f5f3;
-}
-
-/* SIDEBAR */
-
-.sidebar {
-    width: 250px;
-    height: 100vh;
-    position: fixed;
-    left: 0;
-    top: 0;
-    background: #0b1c20;
-    border-right: 1px solid #16373b;
-    padding: 25px 18px;
-}
-
-.logo {
-    padding: 10px 12px 28px;
-    border-bottom: 1px solid #16373b;
-}
-
-.logo h2 {
-    font-family: 'Space Grotesk', sans-serif;
-    color: #42e6c4;
-    font-size: 22px;
-    letter-spacing: 1px;
-}
-
-.logo p {
-    color: #7e9b9d;
-    font-size: 11px;
-    margin-top: 5px;
-}
-
-.menu {
-    margin-top: 25px;
-}
-
-.menu a {
-    display: block;
-    text-decoration: none;
-    color: #8ca9ab;
-    padding: 13px 14px;
-    border-radius: 8px;
-    margin-bottom: 7px;
-    font-size: 14px;
-    transition: 0.3s;
-}
-
-.menu a:hover,
-.menu a.active {
-    background: #102f32;
-    color: #42e6c4;
-}
-
-.user-box {
-    position: absolute;
-    bottom: 20px;
-    left: 18px;
-    right: 18px;
-    background: #0f272b;
-    border: 1px solid #183c40;
-    padding: 13px;
-    border-radius: 10px;
-}
-
-.user-box strong {
-    display: block;
-    font-size: 13px;
-}
-
-.user-box span {
-    color: #718e90;
-    font-size: 11px;
-}
-
-/* MAIN */
-
-.main {
-    margin-left: 250px;
-    padding: 35px;
-    min-height: 100vh;
-}
-
-.top-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 28px;
-}
-
-.page-title h1 {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 30px;
-}
-
-.page-title p {
-    color: #789294;
-    margin-top: 6px;
-    font-size: 13px;
-}
-
-.back-btn {
-    text-decoration: none;
-    color: #42e6c4;
-    border: 1px solid #24565a;
-    padding: 10px 16px;
-    border-radius: 7px;
-    font-size: 13px;
-}
-
-.back-btn:hover {
-    background: #102f32;
-}
-
-/* FORM CARD */
-
-.form-card {
-    max-width: 950px;
-    background: #0b1c20;
-    border: 1px solid #16373b;
-    border-radius: 14px;
-    padding: 28px;
-}
-
-.form-card h2 {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 19px;
-    margin-bottom: 6px;
-}
-
-.form-subtitle {
-    color: #6f8b8d;
-    font-size: 12px;
-    margin-bottom: 25px;
-}
-
-.form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-}
-
-.form-group.full {
-    grid-column: 1 / -1;
-}
-
-.form-group label {
-    color: #a9c0bf;
-    font-size: 12px;
-    margin-bottom: 8px;
-}
-
-.form-group label span {
-    color: #42e6c4;
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-    width: 100%;
-    background: #071417;
-    border: 1px solid #1b4145;
-    color: #e5f1ef;
-    padding: 12px 13px;
-    border-radius: 7px;
-    outline: none;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-    border-color: #42e6c4;
-    box-shadow: 0 0 0 2px rgba(66, 230, 196, 0.08);
-}
-
-.form-group textarea {
-    min-height: 120px;
-    resize: vertical;
-}
-
-.form-group select option {
-    background: #0b1c20;
-}
-
-/* PRODUCT ID */
-
-.product-id-box {
-    background: #102b2f;
-    border: 1px solid #1b4b50;
-    color: #42e6c4;
-    padding: 12px 13px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 600;
-}
-
-/* MESSAGE */
-
-.message {
-    padding: 13px 15px;
-    border-radius: 8px;
-    margin-bottom: 22px;
-    font-size: 13px;
-}
-
-.message.success {
-    background: #103a32;
-    border: 1px solid #205e51;
-    color: #42e6c4;
-}
-
-.message.error {
-    background: #3b1c20;
-    border: 1px solid #673037;
-    color: #ff858c;
-}
-
-/* BUTTONS */
-
-.form-actions {
-    margin-top: 25px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-}
-
-.cancel-btn {
-    text-decoration: none;
-    color: #9bb1b0;
-    border: 1px solid #284448;
-    padding: 12px 20px;
-    border-radius: 7px;
-    font-size: 13px;
-}
-
-.cancel-btn:hover {
-    background: #10272b;
-}
-
-.update-btn {
-    border: none;
-    background: #42e6c4;
-    color: #071417;
-    padding: 12px 22px;
-    border-radius: 7px;
-    font-weight: 700;
-    cursor: pointer;
-    font-size: 13px;
-}
-
-.update-btn:hover {
-    background: #6ff0d5;
-}
-
-/* RESPONSIVE */
-
-@media (max-width: 850px) {
-
-    .sidebar {
-        width: 210px;
-    }
-
-    .main {
-        margin-left: 210px;
-        padding: 25px;
-    }
-
-    .form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .form-group.full {
-        grid-column: auto;
-    }
-}
-
-@media (max-width: 650px) {
-
-    .sidebar {
-        position: relative;
-        width: 100%;
-        height: auto;
-    }
-
-    .user-box {
-        position: relative;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        margin-top: 20px;
-    }
-
-    .main {
-        margin-left: 0;
-        padding: 20px;
-    }
-
-    .top-bar {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 15px;
-    }
-
-}
-
-</style>
+<link rel="stylesheet" href="assets/css/pages/edit-product.css">
 
 </head>
 
@@ -553,7 +166,7 @@ body {
         <h2>Product Information</h2>
 
         <p class="form-subtitle">
-            Modify the required product details and save the changes.
+            Update descriptive information. The generated Product ID and workflow state stay locked for traceability.
         </p>
 
 
@@ -569,6 +182,8 @@ body {
 
 
         <form method="POST">
+            <!-- Session-bound token required by the shared POST security check. -->
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
 
 
             <div class="form-grid">
@@ -599,12 +214,7 @@ body {
                         Product Code <span>*</span>
                     </label>
 
-                    <input
-                        type="text"
-                        name="product_code"
-                        value="<?php echo htmlspecialchars($product['product_code']); ?>"
-                        required
-                    >
+                    <div class="product-id-box"><?php echo htmlspecialchars($product['product_code'], ENT_QUOTES, 'UTF-8'); ?></div>
 
                 </div>
 
@@ -635,11 +245,7 @@ body {
                         Product Type
                     </label>
 
-                    <input
-                        type="text"
-                        name="product_type"
-                        value="<?php echo htmlspecialchars($product['product_type']); ?>"
-                    >
+                    <div class="product-id-box"><?php echo htmlspecialchars($product['product_type'], ENT_QUOTES, 'UTF-8'); ?></div>
 
                 </div>
 
@@ -652,11 +258,7 @@ body {
                         Revision
                     </label>
 
-                    <input
-                        type="text"
-                        name="revision"
-                        value="<?php echo htmlspecialchars($product['revision']); ?>"
-                    >
+                    <div class="product-id-box"><?php echo htmlspecialchars($product['revision'], ENT_QUOTES, 'UTF-8'); ?></div>
 
                 </div>
 
@@ -669,12 +271,7 @@ body {
                         Manufacturing Number <span>*</span>
                     </label>
 
-                    <input
-                        type="text"
-                        name="manufacturing_number"
-                        value="<?php echo htmlspecialchars($product['manufacturing_number']); ?>"
-                        required
-                    >
+                    <div class="product-id-box"><?php echo htmlspecialchars($product['manufacturing_number'], ENT_QUOTES, 'UTF-8'); ?></div>
 
                 </div>
 
@@ -696,54 +293,10 @@ body {
                 </div>
 
 
-                <!-- STATUS -->
-
+                <!-- STATUS is changed only by a test result or the workflow controls. -->
                 <div class="form-group">
-
-                    <label>
-                        Product Status
-                    </label>
-
-                    <select name="status">
-
-                        <option value="Pending Testing"
-                            <?php
-                            if ($product['status'] == 'Pending Testing') {
-                                echo 'selected';
-                            }
-                            ?>>
-                            Pending Testing
-                        </option>
-
-                        <option value="Testing In Progress"
-                            <?php
-                            if ($product['status'] == 'Testing In Progress') {
-                                echo 'selected';
-                            }
-                            ?>>
-                            Testing In Progress
-                        </option>
-
-                        <option value="Passed"
-                            <?php
-                            if ($product['status'] == 'Passed') {
-                                echo 'selected';
-                            }
-                            ?>>
-                            Passed
-                        </option>
-
-                        <option value="Failed - Re-manufacturing"
-                            <?php
-                            if ($product['status'] == 'Failed - Re-manufacturing') {
-                                echo 'selected';
-                            }
-                            ?>>
-                            Failed - Re-manufacturing
-                        </option>
-
-                    </select>
-
+                    <label>Product Workflow Status</label>
+                    <div class="product-id-box"><?php echo htmlspecialchars($product['status'], ENT_QUOTES, 'UTF-8'); ?></div>
                 </div>
 
 
