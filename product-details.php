@@ -69,6 +69,7 @@ $workflowEvents = $event_stmt->get_result();
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
     <meta charset="UTF-8">
 
@@ -186,7 +187,7 @@ $workflowEvents = $event_stmt->get_result();
         <div class="product-title">
 
             <div class="product-icon">
-                ⚡
+                <i class="fa-solid fa-bolt" aria-hidden="true"></i>
             </div>
 
             <div>
@@ -544,7 +545,7 @@ $workflowEvents = $event_stmt->get_result();
                 <div class="empty">
 
                     <div class="empty-icon">
-                        🧪
+                        <i class="fa-solid fa-flask" aria-hidden="true"></i>
                     </div>
 
                     <p>
