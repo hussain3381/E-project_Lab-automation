@@ -39,7 +39,7 @@ try {
         }
     }
 
-    echo "Demo data loaded. Logins: admin, manager, tester, quality; shared demo password: LabDemo@123 (never use in production).\n";
+    echo "Demo data loaded (5 sample products, 7 sample tests). Logins: admin, manager, tester, quality; shared demo password: LabDemo@123. Sample measurements/CPRI row are synthetic; never use them as real certification data.\n";
 } catch (Throwable $exception) {
     fwrite(STDERR, 'Demo seed failed: ' . $exception->getMessage() . "\n");
     exit(1);

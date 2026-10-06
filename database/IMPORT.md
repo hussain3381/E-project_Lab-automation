@@ -1,6 +1,6 @@
 # Import the complete demo database
 
-`project_lab_db_import.sql` is a self-contained MySQL/MariaDB schema-and-demo-data file for phpMyAdmin. It includes all current application tables, the built-in roles, the default demo accounts, product/test catalogues, and one sample product/test.
+`project_lab_db_import.sql` is a self-contained MySQL/MariaDB schema-and-demo-data file for phpMyAdmin. It includes all current application tables, the built-in roles, the default demo accounts, product/test catalogues, and synthetic samples covering pending, in-progress, CPRI-ready, re-manufacturing, and handed-off states. These are not real test measurements or an actual CPRI transfer.
 
 ## Fresh local setup
 
