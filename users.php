@@ -1,198 +1,151 @@
 <?php
 
-include "db.php";
+declare(strict_types=1);
 
-$message = "";
-$error = "";
+require_once __DIR__ . '/config/security.php';
+require_once __DIR__ . '/models/Database.php';
 
+app_start_session();
+require_roles(['Administrator']);
+require_once __DIR__ . '/middlewares/CsrfMiddleware.php';
+CsrfMiddleware::handlePost();
+
+$conn = Database::connection();
+$message = '';
+$error = '';
+
+// Read only the registered system roles so an account cannot be assigned an arbitrary role string.
+$role_options = [];
+$role_result = $conn->query('SELECT role_name, description FROM roles ORDER BY id');
+while ($role_row = $role_result->fetch_assoc()) {
+    $role_options[(string) $role_row['role_name']] = (string) $role_row['description'];
+}
+$current_user_name = (string) ($_SESSION['name'] ?? 'Lab Administrator');
+$current_user_role = (string) ($_SESSION['role'] ?? 'Administrator');
+$current_user_initials = '';
+foreach (preg_split('/\s+/', trim($current_user_name)) ?: [] as $namePart) {
+    if ($namePart !== '') {
+        $current_user_initials .= strtoupper(substr($namePart, 0, 1));
+    }
+    if (strlen($current_user_initials) >= 2) {
+        break;
+    }
+}
+$current_user_initials = $current_user_initials !== '' ? $current_user_initials : 'LA';
 
 /* =========================
    ADD USER
 ========================= */
+if (isset($_POST['add_user'])) {
+    $name = trim((string) ($_POST['name'] ?? ''));
+    $username = trim((string) ($_POST['username'] ?? ''));
+    $password = (string) ($_POST['password'] ?? '');
+    $role = trim((string) ($_POST['role'] ?? ''));
 
-if (isset($_POST["add_user"])) {
-
-    $name = trim($_POST["name"]);
-    $username = trim($_POST["username"]);
-    $password = trim($_POST["password"]);
-    $role = trim($_POST["role"]);
-
-    if ($name == "" || $username == "" || $password == "" || $role == "") {
-
-        $error = "Please fill all fields.";
-
+    if ($name === '' || $username === '' || $password === '' || $role === '') {
+        $error = 'Please fill all fields.';
+    } elseif (!array_key_exists($role, $role_options)) {
+        $error = 'Please select one of the registered system roles.';
     } else {
+        try {
+            $check = $conn->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
+            $check->bind_param('s', $username);
+            $check->execute();
+            $exists = $check->get_result()->num_rows > 0;
+            $check->close();
 
-        // Check duplicate username
-        $check = mysqli_prepare(
-            $conn,
-            "SELECT id FROM users WHERE username = ?"
-        );
-
-        mysqli_stmt_bind_param(
-            $check,
-            "s",
-            $username
-        );
-
-        mysqli_stmt_execute($check);
-
-        $result = mysqli_stmt_get_result($check);
-
-        if (mysqli_num_rows($result) > 0) {
-
-            $error = "Username already exists.";
-
-        } else {
-
-            // Hash password
-            $hashed_password = password_hash(
-                $password,
-                PASSWORD_DEFAULT
-            );
-
-            $stmt = mysqli_prepare(
-                $conn,
-                "INSERT INTO users
-                (name, username, password, role)
-                VALUES (?, ?, ?, ?)"
-            );
-
-            mysqli_stmt_bind_param(
-                $stmt,
-                "ssss",
-                $name,
-                $username,
-                $hashed_password,
-                $role
-            );
-
-            if (mysqli_stmt_execute($stmt)) {
-
-                $message = "User added successfully!";
-
+            if ($exists) {
+                $error = 'Username already exists.';
             } else {
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                if (!is_string($hashedPassword)) {
+                    throw new RuntimeException('Could not hash the new user password.');
+                }
 
-                $error = "Unable to add user.";
+                $statement = $conn->prepare(
+                    'INSERT INTO users (name, username, password, role, is_active) VALUES (?, ?, ?, ?, 1)'
+                );
+                $statement->bind_param('ssss', $name, $username, $hashedPassword, $role);
+                $statement->execute();
+                $statement->close();
+                $message = 'User added successfully.';
+            }
+        } catch (Throwable $exception) {
+            error_log('User creation failed: ' . $exception->getMessage());
+            $error = 'Unable to add the user. Check that the username is unique and try again.';
+        }
+    }
+}
+
+/* =========================
+   DELETE USER
+========================= */
+if (isset($_POST['delete_user']) && ctype_digit((string) $_POST['delete_user'])) {
+    $deleteId = (int) $_POST['delete_user'];
+    $currentUserId = (int) ($_SESSION['user_id'] ?? 0);
+
+    if ($deleteId === $currentUserId) {
+        $error = 'You cannot delete the account you are currently using.';
+    } else {
+        $lookup = $conn->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+        $lookup->bind_param('i', $deleteId);
+        $lookup->execute();
+        $target = $lookup->get_result()->fetch_assoc();
+        $lookup->close();
+
+        if ($target === null) {
+            $error = 'The selected account was not found.';
+        } elseif ((string) $target['role'] === 'Administrator') {
+            $countResult = $conn->query("SELECT COUNT(*) AS total FROM users WHERE role = 'Administrator' AND is_active = 1");
+            $activeAdministrators = (int) ($countResult->fetch_assoc()['total'] ?? 0);
+            if ($activeAdministrators <= 1) {
+                $error = 'The last active Administrator account cannot be deleted.';
+            }
+        }
+
+        if ($error === '') {
+            try {
+                $statement = $conn->prepare('DELETE FROM users WHERE id = ?');
+                $statement->bind_param('i', $deleteId);
+                $statement->execute();
+                $message = $statement->affected_rows === 1 ? 'User deleted successfully.' : 'The selected account was not found.';
+                $statement->close();
+            } catch (Throwable $exception) {
+                error_log('User deletion failed: ' . $exception->getMessage());
+                $error = 'Unable to delete the selected user.';
             }
         }
     }
 }
 
-
-/* =========================
-   DELETE USER
-========================= */
-
-if (isset($_GET["delete"]) && is_numeric($_GET["delete"])) {
-
-    $delete_id = intval($_GET["delete"]);
-
-    // Protect main administrator
-    if ($delete_id == 1) {
-
-        $error = "Main administrator account cannot be deleted.";
-
-    } else {
-
-        $stmt = mysqli_prepare(
-            $conn,
-            "DELETE FROM users WHERE id = ?"
-        );
-
-        mysqli_stmt_bind_param(
-            $stmt,
-            "i",
-            $delete_id
-        );
-
-        if (mysqli_stmt_execute($stmt)) {
-
-            $message = "User deleted successfully!";
-
-        } else {
-
-            $error = "Unable to delete user.";
-        }
-    }
-}
-
-
 /* =========================
    USER STATISTICS
 ========================= */
-
-$total_users = 0;
-$admin_users = 0;
-$lab_managers = 0;
-
-
-/* Total Users */
-
-$result = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total FROM users"
-);
-
-if ($result) {
-
-    $row = mysqli_fetch_assoc($result);
-
-    $total_users = $row["total"];
-}
-
-
-/* Administrators */
-
-$result = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM users
-     WHERE role = 'Administrator'"
-);
-
-if ($result) {
-
-    $row = mysqli_fetch_assoc($result);
-
-    $admin_users = $row["total"];
-}
-
-
-/* Lab Managers */
-
-$result = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM users
-     WHERE role = 'Lab Manager'"
-);
-
-if ($result) {
-
-    $row = mysqli_fetch_assoc($result);
-
-    $lab_managers = $row["total"];
-}
-
+$statistics = $conn->query(
+    "SELECT COUNT(*) AS total_users,
+            SUM(role = 'Administrator' AND is_active = 1) AS administrators,
+            SUM(role = 'Lab Manager' AND is_active = 1) AS lab_managers
+     FROM users"
+)->fetch_assoc() ?: [];
+$total_users = (int) ($statistics['total_users'] ?? 0);
+$admin_users = (int) ($statistics['administrators'] ?? 0);
+$lab_managers = (int) ($statistics['lab_managers'] ?? 0);
 
 /* =========================
    GET ALL USERS
 ========================= */
-
-$users = mysqli_query(
-    $conn,
-    "SELECT id, name, username, role, created_at
-     FROM users
-     ORDER BY id DESC"
+$users = $conn->query(
+    'SELECT id, name, username, role, is_active, created_at FROM users ORDER BY id DESC'
 );
-
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
+    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
+    <link rel="stylesheet" href="assets/compiled/app.css">
+    <script type="module" src="assets/compiled/app.js"></script>
 
 <meta charset="UTF-8">
 
@@ -212,900 +165,7 @@ $users = mysqli_query(
 >
 
 
-<style>
-
-/* =====================================================
-   RESET
-===================================================== */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-
-/* =====================================================
-   BODY
-===================================================== */
-
-body {
-
-    font-family: "Inter", sans-serif;
-
-    background:
-        radial-gradient(
-            circle at top left,
-            rgba(72, 215, 196, 0.045),
-            transparent 35%
-        ),
-        #071014;
-
-    color: #e7ffff;
-
-    min-height: 100vh;
-}
-
-
-/* =====================================================
-   SIDEBAR
-===================================================== */
-
-.sidebar {
-
-    position: fixed;
-
-    left: 0;
-    top: 0;
-
-    width: 245px;
-    height: 100vh;
-
-    background: #09171b;
-
-    border-right: 1px solid rgba(255,255,255,0.05);
-
-    padding: 25px 18px;
-
-    display: flex;
-    flex-direction: column;
-
-    z-index: 100;
-}
-
-
-/* =====================================================
-   BRAND
-===================================================== */
-
-.brand {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 12px;
-
-    padding: 0 8px 25px;
-
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-
-.brand-icon {
-
-    width: 38px;
-    height: 38px;
-
-    border-radius: 10px;
-
-    background: rgba(72,215,196,0.09);
-
-    color: #48d7c4;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    font-size: 20px;
-
-    border: 1px solid rgba(72,215,196,0.12);
-}
-
-
-.brand-text {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 17px;
-
-    font-weight: 700;
-
-    letter-spacing: 0.7px;
-
-    color: #e8ffff;
-}
-
-
-.brand-subtitle {
-
-    margin-top: 3px;
-
-    font-size: 10px;
-
-    color: #607779;
-
-    letter-spacing: 0.7px;
-}
-
-
-/* =====================================================
-   NAVIGATION TITLE
-===================================================== */
-
-.nav-title {
-
-    margin: 25px 10px 12px;
-
-    font-size: 10px;
-
-    font-weight: 600;
-
-    text-transform: uppercase;
-
-    letter-spacing: 1.5px;
-
-    color: #52686a;
-}
-
-
-/* =====================================================
-   NAVIGATION
-===================================================== */
-
-.nav {
-
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 5px;
-}
-
-
-.nav-link {
-
-    position: relative;
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 12px;
-
-    padding: 11px 12px;
-
-    color: #829799;
-
-    text-decoration: none;
-
-    border-radius: 8px;
-
-    font-size: 13px;
-
-    transition: 0.25s ease;
-
-    border: 1px solid transparent;
-}
-
-
-.nav-link:hover {
-
-    background: rgba(72,215,196,0.06);
-
-    color: #b9d8d7;
-}
-
-
-.nav-link.active {
-
-    background: rgba(72,215,196,0.09);
-
-    border-color: rgba(72,215,196,0.10);
-
-    color: #48d7c4;
-}
-
-
-.nav-link.active::before {
-
-    content: "";
-
-    position: absolute;
-
-    left: -1px;
-
-    top: 8px;
-
-    bottom: 8px;
-
-    width: 3px;
-
-    border-radius: 0 4px 4px 0;
-
-    background: #48d7c4;
-}
-
-
-.nav-icon {
-
-    width: 20px;
-
-    text-align: center;
-
-    font-size: 15px;
-
-    color: inherit;
-}
-
-
-/* =====================================================
-   SIDEBAR BOTTOM
-===================================================== */
-
-.sidebar-bottom {
-
-    margin-top: auto;
-
-    padding-top: 18px;
-
-    border-top: 1px solid rgba(255,255,255,0.05);
-}
-
-
-.user-box {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 10px;
-
-    padding: 10px;
-
-    border-radius: 9px;
-
-    background: rgba(255,255,255,0.015);
-}
-
-
-.user-avatar {
-
-    width: 34px;
-    height: 34px;
-
-    flex-shrink: 0;
-
-    border-radius: 50%;
-
-    background: #48d7c4;
-
-    color: #061110;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    font-size: 11px;
-
-    font-weight: 800;
-}
-
-
-.user-info {
-
-    min-width: 0;
-}
-
-
-.user-info strong {
-
-    display: block;
-
-    color: #d8eeee;
-
-    font-size: 11px;
-
-    white-space: nowrap;
-
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-}
-
-
-.user-info span {
-
-    display: block;
-
-    margin-top: 3px;
-
-    color: #607779;
-
-    font-size: 10px;
-}
-
-
-/* =====================================================
-   MAIN
-===================================================== */
-
-.main {
-
-    margin-left: 245px;
-
-    padding: 30px 35px;
-
-    min-height: 100vh;
-}
-
-
-/* =====================================================
-   HEADER
-===================================================== */
-
-.topbar {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: flex-start;
-
-    margin-bottom: 28px;
-}
-
-
-.topbar h2 {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 29px;
-
-    font-weight: 600;
-
-    color: #e8ffff;
-}
-
-
-.topbar p {
-
-    margin-top: 6px;
-
-    color: #62797b;
-
-    font-size: 13px;
-}
-
-
-/* =====================================================
-   MESSAGES
-===================================================== */
-
-.message {
-
-    padding: 13px 16px;
-
-    margin-bottom: 20px;
-
-    background: rgba(72,215,196,0.07);
-
-    border: 1px solid rgba(72,215,196,0.20);
-
-    color: #48d7c4;
-
-    border-radius: 10px;
-
-    font-size: 13px;
-}
-
-
-.error {
-
-    padding: 13px 16px;
-
-    margin-bottom: 20px;
-
-    background: rgba(255,80,80,0.07);
-
-    border: 1px solid rgba(255,80,80,0.20);
-
-    color: #ff9090;
-
-    border-radius: 10px;
-
-    font-size: 13px;
-}
-
-
-/* =====================================================
-   STATS
-===================================================== */
-
-.stats {
-
-    display: grid;
-
-    grid-template-columns: repeat(3, 1fr);
-
-    gap: 18px;
-
-    margin-bottom: 25px;
-}
-
-
-.stat-card {
-
-    background: #0b1a1e;
-
-    border: 1px solid rgba(255,255,255,0.055);
-
-    border-radius: 15px;
-
-    padding: 21px;
-}
-
-
-.stat-card p {
-
-    color: #62797b;
-
-    font-size: 12px;
-}
-
-
-.stat-card h3 {
-
-    margin-top: 8px;
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 29px;
-
-    color: #48d7c4;
-}
-
-
-/* =====================================================
-   FORM CARD
-===================================================== */
-
-.form-card {
-
-    background: #0b1a1e;
-
-    border: 1px solid rgba(255,255,255,0.055);
-
-    border-radius: 15px;
-
-    padding: 24px;
-
-    margin-bottom: 25px;
-}
-
-
-.form-card h3 {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 18px;
-
-    color: #e5ffff;
-
-    margin-bottom: 5px;
-}
-
-
-.form-card > p {
-
-    color: #62797b;
-
-    font-size: 12px;
-
-    margin-bottom: 22px;
-}
-
-
-/* =====================================================
-   FORM GRID
-===================================================== */
-
-.form-grid {
-
-    display: grid;
-
-    grid-template-columns: repeat(2, 1fr);
-
-    gap: 18px;
-}
-
-
-.form-group {
-
-    display: flex;
-
-    flex-direction: column;
-}
-
-
-label {
-
-    font-size: 12px;
-
-    color: #91aaaa;
-
-    margin-bottom: 8px;
-}
-
-
-input,
-select {
-
-    width: 100%;
-
-    padding: 12px 13px;
-
-    background: #071014;
-
-    border: 1px solid rgba(255,255,255,0.08);
-
-    border-radius: 8px;
-
-    color: #e8ffff;
-
-    outline: none;
-
-    font-family: "Inter", sans-serif;
-
-    font-size: 13px;
-
-    transition: 0.2s;
-}
-
-
-input::placeholder {
-
-    color: #4e6466;
-}
-
-
-input:focus,
-select:focus {
-
-    border-color: rgba(72,215,196,0.55);
-
-    box-shadow: 0 0 0 3px rgba(72,215,196,0.06);
-}
-
-
-select option {
-
-    background: #0b1a1e;
-
-    color: #e8ffff;
-}
-
-
-/* =====================================================
-   BUTTON
-===================================================== */
-
-.form-buttons {
-
-    margin-top: 20px;
-}
-
-
-.save-btn {
-
-    background: #48d7c4;
-
-    color: #061110;
-
-    border: none;
-
-    padding: 11px 18px;
-
-    border-radius: 8px;
-
-    font-size: 12px;
-
-    font-weight: 700;
-
-    cursor: pointer;
-
-    transition: 0.2s;
-}
-
-
-.save-btn:hover {
-
-    background: #65e3d1;
-
-    transform: translateY(-1px);
-}
-
-
-/* =====================================================
-   TABLE CARD
-===================================================== */
-
-.table-card {
-
-    background: #0b1a1e;
-
-    border: 1px solid rgba(255,255,255,0.055);
-
-    border-radius: 15px;
-
-    overflow: hidden;
-}
-
-
-.table-header {
-
-    padding: 20px 22px;
-
-    border-bottom: 1px solid rgba(255,255,255,0.055);
-}
-
-
-.table-header h3 {
-
-    font-family: "Space Grotesk", sans-serif;
-
-    font-size: 17px;
-
-    color: #e5ffff;
-}
-
-
-.table-header p {
-
-    color: #62797b;
-
-    font-size: 12px;
-
-    margin-top: 5px;
-}
-
-
-.table-wrapper {
-
-    width: 100%;
-
-    overflow-x: auto;
-}
-
-
-table {
-
-    width: 100%;
-
-    min-width: 700px;
-
-    border-collapse: collapse;
-}
-
-
-th {
-
-    padding: 14px 16px;
-
-    text-align: left;
-
-    font-size: 10px;
-
-    color: #637b7d;
-
-    text-transform: uppercase;
-
-    letter-spacing: 0.7px;
-
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-
-    white-space: nowrap;
-}
-
-
-td {
-
-    padding: 15px 16px;
-
-    border-bottom: 1px solid rgba(255,255,255,0.035);
-
-    font-size: 13px;
-
-    color: #c7dddd;
-}
-
-
-tbody tr {
-
-    transition: 0.2s;
-}
-
-
-tbody tr:hover {
-
-    background: rgba(72,215,196,0.025);
-}
-
-
-tbody tr:last-child td {
-
-    border-bottom: none;
-}
-
-
-/* =====================================================
-   ROLE BADGE
-===================================================== */
-
-.role {
-
-    display: inline-block;
-
-    padding: 5px 9px;
-
-    border-radius: 20px;
-
-    background: rgba(72,215,196,0.08);
-
-    border: 1px solid rgba(72,215,196,0.10);
-
-    color: #48d7c4;
-
-    font-size: 10px;
-
-    font-weight: 600;
-}
-
-
-/* =====================================================
-   DELETE BUTTON
-===================================================== */
-
-.delete-btn {
-
-    display: inline-block;
-
-    padding: 7px 11px;
-
-    border-radius: 7px;
-
-    text-decoration: none;
-
-    color: #ff9090;
-
-    border: 1px solid rgba(255,90,90,0.25);
-
-    background: rgba(255,90,90,0.03);
-
-    font-size: 11px;
-
-    transition: 0.2s;
-}
-
-
-.delete-btn:hover {
-
-    background: rgba(255,90,90,0.09);
-
-    border-color: rgba(255,90,90,0.4);
-}
-
-
-.protected {
-
-    color: #607779;
-
-    font-size: 11px;
-}
-
-
-/* =====================================================
-   RESPONSIVE
-===================================================== */
-
-@media (max-width: 1100px) {
-
-    .sidebar {
-
-        width: 225px;
-    }
-
-    .main {
-
-        margin-left: 225px;
-
-        padding: 28px;
-    }
-
-    .stats {
-
-        grid-template-columns: repeat(3, 1fr);
-    }
-}
-
-
-@media (max-width: 850px) {
-
-    .sidebar {
-
-        width: 210px;
-    }
-
-    .main {
-
-        margin-left: 210px;
-
-        padding: 24px;
-    }
-
-    .stats {
-
-        grid-template-columns: 1fr;
-    }
-
-    .form-grid {
-
-        grid-template-columns: 1fr;
-    }
-}
-
-
-@media (max-width: 700px) {
-
-    .sidebar {
-
-        position: relative;
-
-        width: 100%;
-
-        height: auto;
-
-        min-height: auto;
-    }
-
-    .main {
-
-        margin-left: 0;
-
-        padding: 22px 18px;
-    }
-
-    .topbar {
-
-        flex-direction: column;
-
-        gap: 8px;
-    }
-
-    .nav {
-
-        gap: 3px;
-    }
-
-    .sidebar-bottom {
-
-        margin-top: 20px;
-    }
-}
-
-</style>
+<link rel="stylesheet" href="assets/css/pages/users.css">
 
 </head>
 
@@ -1238,9 +298,18 @@ tbody tr:last-child td {
         <a
             href="users.php"
             class="nav-link active"
+            aria-current="page"
         >
             <span class="nav-icon">♟</span>
             <span>Users</span>
+        </a>
+
+        <a
+            href="roles.php"
+            class="nav-link"
+        >
+            <span class="nav-icon">♜</span>
+            <span>Roles &amp; Access</span>
         </a>
 
     </nav>
@@ -1253,19 +322,12 @@ tbody tr:last-child td {
         <div class="user-box">
 
             <div class="user-avatar">
-                LA
+                <?php echo htmlspecialchars($current_user_initials, ENT_QUOTES, 'UTF-8'); ?>
             </div>
 
             <div class="user-info">
-
-                <strong>
-                    Lab Administrator
-                </strong>
-
-                <span>
-                    Administrator
-                </span>
-
+                <strong><?php echo htmlspecialchars($current_user_name, ENT_QUOTES, 'UTF-8'); ?></strong>
+                <span><?php echo htmlspecialchars($current_user_role, ENT_QUOTES, 'UTF-8'); ?></span>
             </div>
 
         </div>
@@ -1401,6 +463,8 @@ tbody tr:last-child td {
 
 
         <form method="POST">
+            <!-- Session-bound token required by the shared POST security check. -->
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
 
 
             <div class="form-grid">
@@ -1477,21 +541,12 @@ tbody tr:last-child td {
                             Select Role
                         </option>
 
-                        <option value="Administrator">
-                            Administrator
-                        </option>
-
-                        <option value="Lab Manager">
-                            Lab Manager
-                        </option>
-
-                        <option value="Tester">
-                            Tester
-                        </option>
-
-                        <option value="Quality Control">
-                            Quality Control
-                        </option>
+                        <?php foreach ($role_options as $roleName => $roleDescription): ?>
+                            <option value="<?php echo htmlspecialchars($roleName, ENT_QUOTES, 'UTF-8'); ?>"
+                                title="<?php echo htmlspecialchars($roleDescription, ENT_QUOTES, 'UTF-8'); ?>">
+                                <?php echo htmlspecialchars($roleName, ENT_QUOTES, 'UTF-8'); ?>
+                            </option>
+                        <?php endforeach; ?>
 
                     </select>
 
@@ -1634,7 +689,7 @@ tbody tr:last-child td {
                             <td>
 
 
-                                <?php if ($row["id"] == 1): ?>
+                                <?php if ((int) $row['id'] === (int) ($_SESSION['user_id'] ?? 0) || ((string) $row['role'] === 'Administrator' && $admin_users <= 1)): ?>
 
 
                                     <span class="protected">
@@ -1645,13 +700,12 @@ tbody tr:last-child td {
                                 <?php else: ?>
 
 
-                                    <a
-                                        href="users.php?delete=<?php echo $row["id"]; ?>"
-                                        class="delete-btn"
-                                        onclick="return confirm('Are you sure you want to delete this user?');"
-                                    >
-                                        Delete
-                                    </a>
+                                    <form method="POST" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                                        <!-- The shared CSRF check also protects destructive actions. -->
+                                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+                                        <input type="hidden" name="delete_user" value="<?php echo (int) $row["id"]; ?>">
+                                        <button type="submit" class="delete-btn">Delete</button>
+                                    </form>
 
 
                                 <?php endif; ?>

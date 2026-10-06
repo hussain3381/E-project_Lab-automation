@@ -1,11 +1,10 @@
 <?php
+// End the authenticated session and return to the login page.
 
-session_start();
+declare(strict_types=1);
 
-session_unset();
-session_destroy();
+require_once __DIR__ . '/config/security.php';
 
-header("Location: login.php");
+app_logout_session();
+header('Location: login.php', true, 303);
 exit;
-
-?>

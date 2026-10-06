@@ -1,113 +1,113 @@
 <?php
-include "db.php";
+// Validate product registration and build its ID from the selected sprint mapping.
+declare(strict_types=1);
+
+require_once __DIR__ . "/db.php";
+require_roles(['Administrator', 'Lab Manager']);
+require_once __DIR__ . "/models/ProductIdGenerator.php";
+require_once __DIR__ . "/models/ProductCode.php";
+require_once __DIR__ . "/models/ProductCatalog.php";
 
 $message = "";
 $message_type = "";
+$productTypes = ProductCatalog::activeTypes($conn);
+$productCodes = ProductCatalog::allCodes($conn);
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST") {
+    $product_code = strtoupper(trim((string) ($_POST["product_code"] ?? "")));
+    $product_type_id = (int) ($_POST["product_type_id"] ?? 0);
+    $product_name = trim((string) ($_POST["product_name"] ?? ""));
+    $revision = trim((string) ($_POST["revision"] ?? ""));
+    $manufacturing_number = trim((string) ($_POST["manufacturing_number"] ?? ""));
+    $manufacturing_date = trim((string) ($_POST["manufacturing_date"] ?? ""));
+    $description = trim((string) ($_POST["description"] ?? ""));
 
-    $product_code = trim($_POST["product_code"]);
-    $product_name = trim($_POST["product_name"]);
-    $product_type = trim($_POST["product_type"]);
-    $revision = trim($_POST["revision"]);
-    $manufacturing_number = trim($_POST["manufacturing_number"]);
-    $manufacturing_date = $_POST["manufacturing_date"];
-    $description = trim($_POST["description"]);
-
-    if (
-        empty($product_code) ||
-        empty($product_name) ||
-        empty($product_type) ||
-        empty($revision) ||
-        empty($manufacturing_number) ||
-        empty($manufacturing_date)
-    ) {
+    if ($product_code === "" || $product_type_id < 1 || $product_name === "" || $revision === "" || $manufacturing_number === "" || $manufacturing_date === "") {
         $message = "Please fill all required fields.";
         $message_type = "error";
     } else {
+        $family = ProductCatalog::findActiveType($conn, $product_type_id);
+        $codeMapping = ProductCode::findActiveByCode($conn, $product_code);
 
-        /*
-         Product ID:
-         Product Code + Revision + Manufacturing Number
-         Example: 1234 + 01 + 567890 = 123401567890
-         Database field currently accepts 10 characters,
-         so we generate a unique 10-digit numeric ID.
-        */
-
-        $product_id = str_pad(
-            preg_replace('/\D/', '', $manufacturing_number),
-            10,
-            "0",
-            STR_PAD_LEFT
-        );
-
-        // Make sure Product ID is exactly 10 digits
-        $product_id = substr($product_id, 0, 10);
-
-        // Check duplicate Product ID
-        $check = mysqli_prepare(
-            $conn,
-            "SELECT id FROM products WHERE product_id = ?"
-        );
-
-        mysqli_stmt_bind_param($check, "s", $product_id);
-        mysqli_stmt_execute($check);
-        mysqli_stmt_store_result($check);
-
-        if (mysqli_stmt_num_rows($check) > 0) {
-
-            $message = "This Product ID already exists. Please use a different manufacturing number.";
+        if ($family === null) {
+            $message = "Select an active product family.";
             $message_type = "error";
-
+        } elseif ($codeMapping === null) {
+            $message = "This product code/model is not registered. Ask an Administrator to add it in Product Catalog.";
+            $message_type = "error";
+        } elseif ((int) $codeMapping['product_type_id'] !== $product_type_id) {
+            $message = "The selected family does not match the registered product code/model.";
+            $message_type = "error";
         } else {
+            try {
+                $product_id = ProductIdGenerator::generate(
+                    (string) $codeMapping['numeric_code'],
+                    $revision,
+                    $manufacturing_number
+                );
 
-            $stmt = mysqli_prepare(
-                $conn,
-                "INSERT INTO products
-                (product_id, product_code, product_name, product_type,
-                revision, manufacturing_number, manufacturing_date,
-                description, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending Testing')"
-            );
+                $check = $conn->prepare("SELECT id FROM products WHERE product_id = ? LIMIT 1");
+                $check->bind_param("s", $product_id);
+                $check->execute();
+                $duplicate = $check->get_result()->num_rows > 0;
+                $check->close();
 
-            mysqli_stmt_bind_param(
-                $stmt,
-                "ssssssss",
-                $product_id,
-                $product_code,
-                $product_name,
-                $product_type,
-                $revision,
-                $manufacturing_number,
-                $manufacturing_date,
-                $description
-            );
+                if ($duplicate) {
+                    $message = "This Product ID already exists. Check the revision or manufacturing number.";
+                    $message_type = "error";
+                } else {
+                    $stmt = $conn->prepare(
+                        "INSERT INTO products
+                        (product_id, product_code, product_code_id, product_code_numeric,
+                         product_name, product_type, product_type_id, revision,
+                         manufacturing_number, manufacturing_date, description, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending Testing')"
+                    );
+                    $numericCode = (string) $codeMapping['numeric_code'];
+                    $familyName = (string) $family['type_name'];
+                    $codeId = (int) $codeMapping['id'];
+                    $stmt->bind_param(
+                        "ssisssissss",
+                        $product_id,
+                        $product_code,
+                        $codeId,
+                        $numericCode,
+                        $product_name,
+                        $familyName,
+                        $product_type_id,
+                        $revision,
+                        $manufacturing_number,
+                        $manufacturing_date,
+                        $description
+                    );
 
-            if (mysqli_stmt_execute($stmt)) {
-
-                $message = "Product added successfully! Product ID: " . $product_id;
-                $message_type = "success";
-
-                $_POST = array();
-
-            } else {
-
-                $message = "Error: " . mysqli_error($conn);
+                    try {
+                        $stmt->execute();
+                        $message = "Product added successfully! Product ID: " . $product_id;
+                        $message_type = "success";
+                        $_POST = [];
+                    } catch (mysqli_sql_exception $exception) {
+                        error_log('Lab Automation product insert failed: ' . $exception->getMessage());
+                        $message = "The Product ID or manufacturing record already exists. Check the entered numbers.";
+                        $message_type = "error";
+                    }
+                    $stmt->close();
+                }
+            } catch (InvalidArgumentException $exception) {
+                $message = $exception->getMessage();
                 $message_type = "error";
             }
-
-            mysqli_stmt_close($stmt);
         }
-
-        mysqli_stmt_close($check);
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
+    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
+    <link rel="stylesheet" href="assets/compiled/app.css">
+    <script type="module" src="assets/compiled/app.js"></script>
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -116,308 +116,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 
-    <style>
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #071111;
-            color: #e9ffff;
-            min-height: 100vh;
-        }
-
-        /* Sidebar */
-
-        .sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 245px;
-            height: 100vh;
-            background: #0b1718;
-            border-right: 1px solid rgba(76, 255, 218, 0.12);
-            padding: 28px 18px;
-        }
-
-        .logo {
-            padding: 0 12px 28px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 25px;
-        }
-
-        .logo h1 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 21px;
-            letter-spacing: 1px;
-        }
-
-        .logo span {
-            color: #4cffda;
-        }
-
-        .logo p {
-            font-size: 11px;
-            color: #759090;
-            margin-top: 6px;
-        }
-
-        .nav-title {
-            font-size: 10px;
-            color: #5e7777;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin: 20px 12px 10px;
-        }
-
-        .nav a {
-            display: block;
-            text-decoration: none;
-            color: #8fa6a6;
-            padding: 12px 13px;
-            margin: 5px 0;
-            border-radius: 9px;
-            font-size: 13px;
-            transition: 0.25s;
-        }
-
-        .nav a:hover,
-        .nav a.active {
-            background: rgba(76, 255, 218, 0.08);
-            color: #4cffda;
-        }
-
-        /* Main */
-
-        .main {
-            margin-left: 245px;
-            padding: 35px;
-        }
-
-        .top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-        }
-
-        .top h2 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 27px;
-        }
-
-        .top p {
-            color: #718989;
-            font-size: 13px;
-            margin-top: 6px;
-        }
-
-        .back-btn {
-            text-decoration: none;
-            color: #4cffda;
-            border: 1px solid rgba(76,255,218,0.25);
-            padding: 10px 16px;
-            border-radius: 8px;
-            font-size: 13px;
-        }
-
-        .back-btn:hover {
-            background: rgba(76,255,218,0.08);
-        }
-
-        /* Form Card */
-
-        .form-card {
-            max-width: 1050px;
-            background: #0c1a1b;
-            border: 1px solid rgba(76,255,218,0.12);
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-        }
-
-        .section-title {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 17px;
-            margin-bottom: 22px;
-            color: #ffffff;
-        }
-
-        .section-title span {
-            color: #4cffda;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 22px;
-        }
-
-        .field {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .field.full {
-            grid-column: 1 / -1;
-        }
-
-        label {
-            font-size: 12px;
-            color: #9bb0b0;
-            margin-bottom: 8px;
-        }
-
-        label span {
-            color: #4cffda;
-        }
-
-        input,
-        select,
-        textarea {
-            width: 100%;
-            background: #081415;
-            border: 1px solid rgba(255,255,255,0.10);
-            color: #eaffff;
-            padding: 13px 14px;
-            border-radius: 8px;
-            outline: none;
-            font-family: inherit;
-            font-size: 13px;
-            transition: 0.25s;
-        }
-
-        input:focus,
-        select:focus,
-        textarea:focus {
-            border-color: #4cffda;
-            box-shadow: 0 0 0 3px rgba(76,255,218,0.06);
-        }
-
-        select option {
-            background: #0c1a1b;
-        }
-
-        textarea {
-            min-height: 120px;
-            resize: vertical;
-        }
-
-        .info-box {
-            margin-top: 25px;
-            padding: 14px 16px;
-            background: rgba(76,255,218,0.04);
-            border: 1px solid rgba(76,255,218,0.10);
-            border-radius: 9px;
-            color: #88a0a0;
-            font-size: 12px;
-            line-height: 1.6;
-        }
-
-        .info-box strong {
-            color: #4cffda;
-        }
-
-        .message {
-            max-width: 1050px;
-            padding: 13px 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 13px;
-        }
-
-        .success {
-            background: rgba(48, 220, 150, 0.08);
-            border: 1px solid rgba(48, 220, 150, 0.25);
-            color: #6ff0b5;
-        }
-
-        .error {
-            background: rgba(255, 80, 80, 0.08);
-            border: 1px solid rgba(255, 80, 80, 0.25);
-            color: #ff8989;
-        }
-
-        .actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            margin-top: 28px;
-        }
-
-        .btn {
-            border: none;
-            padding: 13px 22px;
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .btn-cancel {
-            background: #152324;
-            color: #91a7a7;
-            text-decoration: none;
-        }
-
-        .btn-save {
-            background: #4cffda;
-            color: #061010;
-        }
-
-        .btn-save:hover {
-            box-shadow: 0 0 22px rgba(76,255,218,0.25);
-            transform: translateY(-1px);
-        }
-
-        /* Responsive */
-
-        @media (max-width: 850px) {
-
-            .sidebar {
-                width: 190px;
-            }
-
-            .main {
-                margin-left: 190px;
-                padding: 25px;
-            }
-
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .field.full {
-                grid-column: auto;
-            }
-        }
-
-        @media (max-width: 650px) {
-
-            .sidebar {
-                position: relative;
-                width: 100%;
-                height: auto;
-            }
-
-            .main {
-                margin-left: 0;
-            }
-
-            .top {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-
-        }
-
-    </style>
+    <link rel="stylesheet" href="assets/css/pages/add-product.css">
 
 </head>
 
@@ -499,6 +198,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
 
             <form method="POST">
+            <!-- Session-bound token required by the shared POST security check. -->
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
 
                 <div class="form-grid">
 
@@ -511,10 +212,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <input
                             type="text"
                             name="product_code"
+                            list="product-code-options"
                             placeholder="e.g. SWG01"
                             value="<?php echo htmlspecialchars($_POST['product_code'] ?? ''); ?>"
                             required
                         >
+                        <datalist id="product-code-options">
+                            <?php foreach ($productCodes as $codeOption): ?>
+                                <option value="<?php echo htmlspecialchars($codeOption['product_code'], ENT_QUOTES, 'UTF-8'); ?>">
+                            <?php endforeach; ?>
+                        </datalist>
 
                     </div>
 
@@ -539,20 +246,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="field">
 
                         <label>
-                            Product Type <span>*</span>
+                            Product Family <span>*</span>
                         </label>
 
-                        <select name="product_type" required>
-
-                            <option value="">Select Product Type</option>
-
-                            <option value="Switch Gear">Switch Gear</option>
-                            <option value="Fuse">Fuse</option>
-                            <option value="Capacitor">Capacitor</option>
-                            <option value="Resistor">Resistor</option>
-                            <option value="Circuit Breaker">Circuit Breaker</option>
-                            <option value="Other">Other</option>
-
+                        <select name="product_type_id" required>
+                            <option value="">Select Product Family</option>
+                            <?php foreach ($productTypes as $typeOption): ?>
+                                <option value="<?php echo (int) $typeOption['id']; ?>" <?php echo (int) ($_POST['product_type_id'] ?? 0) === (int) $typeOption['id'] ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($typeOption['type_name'], ENT_QUOTES, 'UTF-8'); ?>
+                                </option>
+                            <?php endforeach; ?>
                         </select>
 
                     </div>
@@ -561,13 +264,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="field">
 
                         <label>
-                            Revision <span>*</span>
+                            Revision Code (2 digits) <span>*</span>
                         </label>
 
                         <input
                             type="text"
                             name="revision"
-                            placeholder="e.g. R01"
+                            placeholder="e.g. 01"
+                            inputmode="numeric"
+                            pattern="[0-9]{2}"
+                            maxlength="2"
                             value="<?php echo htmlspecialchars($_POST['revision'] ?? ''); ?>"
                             required
                         >
@@ -584,7 +290,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <input
                             type="text"
                             name="manufacturing_number"
-                            placeholder="Enter manufacturing number"
+                            placeholder="1 to 6 digits; padded to 6"
+                            inputmode="numeric"
+                            pattern="[0-9]{1,6}"
+                            maxlength="6"
                             value="<?php echo htmlspecialchars($_POST['manufacturing_number'] ?? ''); ?>"
                             required
                         >
@@ -627,9 +336,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="info-box">
 
                     <strong>Testing Flow:</strong>
-                    After registration, the product will receive the status
-                    <strong>Pending Testing</strong>.
-                    You can then assign the required tests from the Testing module.
+                    Product ID is generated as <strong>2-digit product-code ID + 2-digit revision + 6-digit manufacturing number</strong>.
+                    The exact code/model must first be mapped by an Administrator in Product Catalog.
 
                 </div>
 
