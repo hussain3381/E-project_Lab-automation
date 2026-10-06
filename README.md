@@ -22,7 +22,7 @@ A plain-PHP/MySQL laboratory tracking application for electrical products. Larav
 ## Setup
 
 1. Copy `.env.example` to `.env` and set the database values for your local or team-shared MySQL host.
-2. For a fresh phpMyAdmin/XAMPP install, import `database/project_lab_db_import.sql`. For an existing database, take a backup and run `php scripts/migrate.php`, then `php scripts/seed_demo.php` from the command line. Migrations apply only new versioned changes. A teammate should not re-import a dump over shared lab data.
+2. For a local XAMPP/phpMyAdmin setup, back up first, select the database used by `.env` (default `project_lab_db`), and import `database/project_lab_db_import.sql`; it creates missing tables and conditionally adds common legacy columns. For a shared/team database, use `php scripts/migrate.php` and `php scripts/seed_demo.php` from the command line instead of importing demo rows over shared data.
 3. `database/IMPORT.md` has the import steps and the demo accounts.
 4. Install frontend build dependencies with `npm ci`, then run `npm run check:js` and `npm run build`. The PHP app uses the generated local files in `assets/compiled/`; page-specific CSS is loaded locally.
 5. Point Apache/XAMPP at this project and open `index.php` in the browser.

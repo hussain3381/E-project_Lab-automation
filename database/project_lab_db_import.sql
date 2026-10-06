@@ -1,8 +1,8 @@
--- Full, importable MySQL/MariaDB database for Lab Automation.
--- Import into a NEW/EMPTY project_lab_db in phpMyAdmin (SQL tab or Import tab).
--- Demo accounts are created with password LabDemo@123; change them before real use.
--- Existing data is not dropped by this file. For an existing legacy database, take a backup
--- and run `php scripts/migrate.php` followed by `php scripts/seed_demo.php` instead.
+-- Full MySQL/MariaDB schema and demo-data import for Lab Automation.
+-- Target database: project_lab_db. This file creates missing tables and conditionally adds
+-- compatibility columns used by older project_lab_db schemas; it does not DROP existing data.
+-- Back up first. Demo accounts use LabDemo@123 and all sample test/handoff records are synthetic.
+-- For unusual/custom legacy schemas, run `php scripts/migrate.php` after import and review errors.
 
 CREATE DATABASE IF NOT EXISTS `project_lab_db`
     CHARACTER SET utf8mb4
@@ -274,6 +274,45 @@ CREATE TABLE IF NOT EXISTS `product_workflow_events` (
         ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Upgrade columns safely when this file is imported over an older XAMPP/MariaDB database.
+-- Each prepared ALTER runs only if the selected database does not already have that column.
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'testers' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `testers` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'departments' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `departments` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'product_types' AND COLUMN_NAME = 'numeric_code'), 'SELECT 1', 'ALTER TABLE `product_types` ADD COLUMN `numeric_code` CHAR(2) NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'product_types' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `product_types` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'product_type_id'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `product_type_id` INT NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'product_code_id'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `product_code_id` INT NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'product_code_numeric'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `product_code_numeric` CHAR(2) NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'rework_cycle'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `rework_cycle` INT NOT NULL DEFAULT 0');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'cpri_status'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `cpri_status` VARCHAR(24) NOT NULL DEFAULT ''Not Ready''');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'cpri_handoff_at'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `cpri_handoff_at` DATETIME NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'cpri_reference'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `cpri_reference` VARCHAR(100) NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'cpri_handoff_by'), 'SELECT 1', 'ALTER TABLE `products` ADD COLUMN `cpri_handoff_by` VARCHAR(120) NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'test_types' AND COLUMN_NAME = 'numeric_code'), 'SELECT 1', 'ALTER TABLE `test_types` ADD COLUMN `numeric_code` CHAR(3) NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'test_types' AND COLUMN_NAME = 'department_id'), 'SELECT 1', 'ALTER TABLE `test_types` ADD COLUMN `department_id` INT NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'test_types' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `test_types` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tests' AND COLUMN_NAME = 'cycle_number'), 'SELECT 1', 'ALTER TABLE `tests` ADD COLUMN `cycle_number` INT NOT NULL DEFAULT 1');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tests' AND COLUMN_NAME = 'department_id'), 'SELECT 1', 'ALTER TABLE `tests` ADD COLUMN `department_id` INT NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+
 INSERT IGNORE INTO `schema_migrations` (`migration`) VALUES
     ('001_initial_schema.sql'),
     ('002_legacy_schema_compat.sql'),
@@ -303,11 +342,34 @@ INSERT IGNORE INTO `product_codes` (`id`, `product_type_id`, `product_code`, `nu
     (3, 3, 'CAP01', '03', 'Demo model code for a capacitor'),
     (4, 4, 'RES01', '04', 'Demo model code for a resistor');
 
+-- Link existing legacy products to exact product-code mappings when possible.
+UPDATE `products` AS p
+INNER JOIN `product_codes` AS pc ON pc.`product_code` = p.`product_code`
+INNER JOIN `product_types` AS pt ON pt.`id` = pc.`product_type_id`
+SET p.`product_code_id` = pc.`id`,
+    p.`product_code_numeric` = pc.`numeric_code`,
+    p.`product_type_id` = pc.`product_type_id`,
+    p.`product_type` = pt.`type_name`
+WHERE p.`product_code_id` IS NULL;
+
 INSERT IGNORE INTO `test_types` (`id`, `test_code`, `numeric_code`, `test_name`, `department`, `department_id`, `description`) VALUES
     (1, 'TEMP', '001', 'Temperature Test', 'Electrical Testing', 1, 'Observe the product under the approved temperature criteria.'),
     (2, 'INS', '002', 'Insulation Resistance Test', 'Electrical Testing', 1, 'Measure insulation resistance against the approved specification.'),
     (3, 'HV', '003', 'High Voltage Test', 'Electrical Testing', 1, 'Record high-voltage test observations.'),
     (4, 'MECH', '004', 'Mechanical Operation Test', 'Mechanical Testing', 2, 'Record mechanical operation and endurance observations.');
+
+UPDATE `test_types` AS tt
+LEFT JOIN `departments` AS d ON d.`department_name` = tt.`department`
+SET tt.`numeric_code` = COALESCE(tt.`numeric_code`, CASE tt.`test_code`
+        WHEN 'TEMP' THEN '001' WHEN 'INS' THEN '002' WHEN 'HV' THEN '003' WHEN 'MECH' THEN '004' END),
+    tt.`department_id` = COALESCE(tt.`department_id`, d.`id`),
+    tt.`is_active` = 1
+WHERE tt.`test_code` IN ('TEMP', 'INS', 'HV', 'MECH');
+
+UPDATE `tests` AS t
+LEFT JOIN `test_types` AS tt ON tt.`id` = t.`test_type_id`
+SET t.`department_id` = COALESCE(t.`department_id`, tt.`department_id`)
+WHERE t.`department_id` IS NULL;
 
 INSERT IGNORE INTO `product_type_test_types` (`product_type_id`, `test_type_id`, `sequence_no`, `is_required`) VALUES
     (1, 1, 1, 1), (1, 2, 2, 1), (1, 3, 3, 1), (1, 4, 4, 1),

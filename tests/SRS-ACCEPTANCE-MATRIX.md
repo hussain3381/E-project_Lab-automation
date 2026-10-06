@@ -30,9 +30,10 @@ Run this only against a disposable local/demo database. Never run destructive ca
 | SEARCH-01 | Search by Product ID/Test ID, routed department, cycle, participant tester | Matching records returned | PASS — participant + department + cycle HTTP query |
 | UI-01 | Toggle dark/light and navigate between pages | Choice persists; page styles use shared tokens | Earlier theme checks pass; new pages included in token-based stylesheets |
 | UI-02 | Open Dashboard, Users, and Roles as Administrator; open role pages as Tester | Admin sees clear navigation; non-admin is denied; user form only offers registered roles | PASS — HTTP checks for links, user create/delete, role allow-list, and 403 behavior |
+| UI-03 | Open `testing.php` against a legacy DB without `tests.department_id` | Page uses legacy test-type department fallback instead of fatal SQL error | PASS — HTTP 200 without the column; reran import and confirmed 200 after column restore |
 | DB-01 | Run migrations on a clean schema twice | All migrations apply once; second run is no-op | PASS — clean install + idempotent rerun |
 | DB-02 | Upgrade a legacy-shaped schema with `product_id VARCHAR(20)` and `test_id VARCHAR(30)`; seed then exercise workflow | Data/schema compatibility retained; IDs, rework, retesting, CPRI handoff and audit events work | PASS — latest migrations, seed, and full temporary workflow tested; temporary rows removed |
-| DB-03 | Import `database/project_lab_db_import.sql` into a fresh MySQL/MariaDB schema, rerun it, then run migrations/seed | All current tables, role records, 4 demo users, and 5 products/7 tests load without duplicate growth | PASS — import + second import + migration no-op + two seed runs; counts remained stable |
+| DB-03 | Import `database/project_lab_db_import.sql` into a fresh and a legacy-shaped schema missing `products.product_code_id` and `tests.department_id`; rerun | Compatibility columns added; role records, 4 demo users, and 5 products/7 tests load without duplicate growth | PASS — MariaDB import on legacy fixture, second import; 5 products, 7 tests, 4 users remained stable |
 | EDIT-01 | POST tampered product code/revision/manufacturing/status to generic edit page | Identity/workflow values stay unchanged | PASS — edit page ignores identity/status fields |
 
 ## Remaining release checks

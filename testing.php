@@ -5,13 +5,31 @@ include "db.php";
    TESTING RECORDS
 ========================= */
 
+// Older imported databases may not have the department routing column yet.
+// The migration/import SQL adds it; this fallback keeps the legacy screen usable meanwhile.
+$departmentColumnCheck = mysqli_query(
+    $conn,
+    "SELECT 1 FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'tests'
+       AND COLUMN_NAME = 'department_id'
+     LIMIT 1"
+);
+$hasDepartmentRouting = $departmentColumnCheck && mysqli_num_rows($departmentColumnCheck) > 0;
+$departmentSelect = $hasDepartmentRouting
+    ? 'COALESCE(routed_department.department_name, test_types.department) AS routed_department_name'
+    : 'test_types.department AS routed_department_name';
+$departmentJoin = $hasDepartmentRouting
+    ? 'LEFT JOIN departments AS routed_department ON tests.department_id = routed_department.id'
+    : '';
+
 $result = mysqli_query(
     $conn,
     "SELECT
         tests.*,
         products.product_name,
         test_types.test_name,
-        COALESCE(routed_department.department_name, test_types.department) AS routed_department_name,
+        {$departmentSelect},
         COALESCE((
             SELECT GROUP_CONCAT(DISTINCT participant.name ORDER BY participant.name SEPARATOR ', ')
             FROM test_participants AS participation
@@ -21,7 +39,7 @@ $result = mysqli_query(
      FROM tests
      LEFT JOIN products ON tests.product_id = products.product_id
      LEFT JOIN test_types ON tests.test_type_id = test_types.id
-     LEFT JOIN departments AS routed_department ON tests.department_id = routed_department.id
+     {$departmentJoin}
      LEFT JOIN testers ON tests.tester_id = testers.id
      ORDER BY tests.id DESC"
 );
