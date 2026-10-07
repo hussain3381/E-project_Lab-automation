@@ -1,195 +1,142 @@
 <?php
 
-include "db.php";
+declare(strict_types=1);
 
-// Apply the minimum role boundary for this module.
+require_once __DIR__ . '/config/security.php';
+require_once __DIR__ . '/models/Database.php';
+
+app_start_session();
 require_roles(['Administrator']);
+require_once __DIR__ . '/middlewares/CsrfMiddleware.php';
+CsrfMiddleware::handlePost();
 
-$message = "";
-$error = "";
+$conn = Database::connection();
+$message = '';
+$error = '';
 
+// Read only the registered system roles so an account cannot be assigned an arbitrary role string.
+$role_options = [];
+$role_result = $conn->query('SELECT role_name, description FROM roles ORDER BY id');
+while ($role_row = $role_result->fetch_assoc()) {
+    $role_options[(string) $role_row['role_name']] = (string) $role_row['description'];
+}
+$current_user_name = (string) ($_SESSION['name'] ?? 'Lab Administrator');
+$current_user_role = (string) ($_SESSION['role'] ?? 'Administrator');
+$current_user_initials = '';
+foreach (preg_split('/\s+/', trim($current_user_name)) ?: [] as $namePart) {
+    if ($namePart !== '') {
+        $current_user_initials .= strtoupper(substr($namePart, 0, 1));
+    }
+    if (strlen($current_user_initials) >= 2) {
+        break;
+    }
+}
+$current_user_initials = $current_user_initials !== '' ? $current_user_initials : 'LA';
 
 /* =========================
    ADD USER
 ========================= */
+if (isset($_POST['add_user'])) {
+    $name = trim((string) ($_POST['name'] ?? ''));
+    $username = trim((string) ($_POST['username'] ?? ''));
+    $password = (string) ($_POST['password'] ?? '');
+    $role = trim((string) ($_POST['role'] ?? ''));
 
-if (isset($_POST["add_user"])) {
-
-    $name = trim($_POST["name"]);
-    $username = trim($_POST["username"]);
-    $password = trim($_POST["password"]);
-    $role = trim($_POST["role"]);
-
-    if ($name == "" || $username == "" || $password == "" || $role == "") {
-
-        $error = "Please fill all fields.";
-
+    if ($name === '' || $username === '' || $password === '' || $role === '') {
+        $error = 'Please fill all fields.';
+    } elseif (!array_key_exists($role, $role_options)) {
+        $error = 'Please select one of the registered system roles.';
     } else {
+        try {
+            $check = $conn->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
+            $check->bind_param('s', $username);
+            $check->execute();
+            $exists = $check->get_result()->num_rows > 0;
+            $check->close();
 
-        // Check duplicate username
-        $check = mysqli_prepare(
-            $conn,
-            "SELECT id FROM users WHERE username = ?"
-        );
-
-        mysqli_stmt_bind_param(
-            $check,
-            "s",
-            $username
-        );
-
-        mysqli_stmt_execute($check);
-
-        $result = mysqli_stmt_get_result($check);
-
-        if (mysqli_num_rows($result) > 0) {
-
-            $error = "Username already exists.";
-
-        } else {
-
-            // Hash password
-            $hashed_password = password_hash(
-                $password,
-                PASSWORD_DEFAULT
-            );
-
-            $stmt = mysqli_prepare(
-                $conn,
-                "INSERT INTO users
-                (name, username, password, role)
-                VALUES (?, ?, ?, ?)"
-            );
-
-            mysqli_stmt_bind_param(
-                $stmt,
-                "ssss",
-                $name,
-                $username,
-                $hashed_password,
-                $role
-            );
-
-            if (mysqli_stmt_execute($stmt)) {
-
-                $message = "User added successfully!";
-
+            if ($exists) {
+                $error = 'Username already exists.';
             } else {
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                if (!is_string($hashedPassword)) {
+                    throw new RuntimeException('Could not hash the new user password.');
+                }
 
-                $error = "Unable to add user.";
+                $statement = $conn->prepare(
+                    'INSERT INTO users (name, username, password, role, is_active) VALUES (?, ?, ?, ?, 1)'
+                );
+                $statement->bind_param('ssss', $name, $username, $hashedPassword, $role);
+                $statement->execute();
+                $statement->close();
+                $message = 'User added successfully.';
+            }
+        } catch (Throwable $exception) {
+            error_log('User creation failed: ' . $exception->getMessage());
+            $error = 'Unable to add the user. Check that the username is unique and try again.';
+        }
+    }
+}
+
+/* =========================
+   DELETE USER
+========================= */
+if (isset($_POST['delete_user']) && ctype_digit((string) $_POST['delete_user'])) {
+    $deleteId = (int) $_POST['delete_user'];
+    $currentUserId = (int) ($_SESSION['user_id'] ?? 0);
+
+    if ($deleteId === $currentUserId) {
+        $error = 'You cannot delete the account you are currently using.';
+    } else {
+        $lookup = $conn->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+        $lookup->bind_param('i', $deleteId);
+        $lookup->execute();
+        $target = $lookup->get_result()->fetch_assoc();
+        $lookup->close();
+
+        if ($target === null) {
+            $error = 'The selected account was not found.';
+        } elseif ((string) $target['role'] === 'Administrator') {
+            $countResult = $conn->query("SELECT COUNT(*) AS total FROM users WHERE role = 'Administrator' AND is_active = 1");
+            $activeAdministrators = (int) ($countResult->fetch_assoc()['total'] ?? 0);
+            if ($activeAdministrators <= 1) {
+                $error = 'The last active Administrator account cannot be deleted.';
+            }
+        }
+
+        if ($error === '') {
+            try {
+                $statement = $conn->prepare('DELETE FROM users WHERE id = ?');
+                $statement->bind_param('i', $deleteId);
+                $statement->execute();
+                $message = $statement->affected_rows === 1 ? 'User deleted successfully.' : 'The selected account was not found.';
+                $statement->close();
+            } catch (Throwable $exception) {
+                error_log('User deletion failed: ' . $exception->getMessage());
+                $error = 'Unable to delete the selected user.';
             }
         }
     }
 }
 
-
-/* =========================
-   DELETE USER
-========================= */
-
-if (isset($_POST["delete_user"]) && ctype_digit((string) $_POST["delete_user"])) {
-
-    $delete_id = (int) $_POST["delete_user"];
-
-    // Protect main administrator
-    if ($delete_id == 1) {
-
-        $error = "Main administrator account cannot be deleted.";
-
-    } else {
-
-        $stmt = mysqli_prepare(
-            $conn,
-            "DELETE FROM users WHERE id = ?"
-        );
-
-        mysqli_stmt_bind_param(
-            $stmt,
-            "i",
-            $delete_id
-        );
-
-        if (mysqli_stmt_execute($stmt)) {
-
-            $message = "User deleted successfully!";
-
-        } else {
-
-            $error = "Unable to delete user.";
-        }
-    }
-}
-
-
 /* =========================
    USER STATISTICS
 ========================= */
-
-$total_users = 0;
-$admin_users = 0;
-$lab_managers = 0;
-
-
-/* Total Users */
-
-$result = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total FROM users"
-);
-
-if ($result) {
-
-    $row = mysqli_fetch_assoc($result);
-
-    $total_users = $row["total"];
-}
-
-
-/* Administrators */
-
-$result = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM users
-     WHERE role = 'Administrator'"
-);
-
-if ($result) {
-
-    $row = mysqli_fetch_assoc($result);
-
-    $admin_users = $row["total"];
-}
-
-
-/* Lab Managers */
-
-$result = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM users
-     WHERE role = 'Lab Manager'"
-);
-
-if ($result) {
-
-    $row = mysqli_fetch_assoc($result);
-
-    $lab_managers = $row["total"];
-}
-
+$statistics = $conn->query(
+    "SELECT COUNT(*) AS total_users,
+            SUM(role = 'Administrator' AND is_active = 1) AS administrators,
+            SUM(role = 'Lab Manager' AND is_active = 1) AS lab_managers
+     FROM users"
+)->fetch_assoc() ?: [];
+$total_users = (int) ($statistics['total_users'] ?? 0);
+$admin_users = (int) ($statistics['administrators'] ?? 0);
+$lab_managers = (int) ($statistics['lab_managers'] ?? 0);
 
 /* =========================
    GET ALL USERS
 ========================= */
-
-$users = mysqli_query(
-    $conn,
-    "SELECT id, name, username, role, created_at
-     FROM users
-     ORDER BY id DESC"
+$users = $conn->query(
+    'SELECT id, name, username, role, is_active, created_at FROM users ORDER BY id DESC'
 );
-
 ?>
 
 <!DOCTYPE html>
@@ -352,9 +299,18 @@ $users = mysqli_query(
         <a
             href="users.php"
             class="nav-link active"
+            aria-current="page"
         >
             <span class="nav-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
             <span>Users</span>
+        </a>
+
+        <a
+            href="roles.php"
+            class="nav-link"
+        >
+            <span class="nav-icon">♜</span>
+            <span>Roles &amp; Access</span>
         </a>
 
     </nav>
@@ -367,19 +323,12 @@ $users = mysqli_query(
         <div class="user-box">
 
             <div class="user-avatar">
-                LA
+                <?php echo htmlspecialchars($current_user_initials, ENT_QUOTES, 'UTF-8'); ?>
             </div>
 
             <div class="user-info">
-
-                <strong>
-                    Lab Administrator
-                </strong>
-
-                <span>
-                    Administrator
-                </span>
-
+                <strong><?php echo htmlspecialchars($current_user_name, ENT_QUOTES, 'UTF-8'); ?></strong>
+                <span><?php echo htmlspecialchars($current_user_role, ENT_QUOTES, 'UTF-8'); ?></span>
             </div>
 
         </div>
@@ -593,21 +542,12 @@ $users = mysqli_query(
                             Select Role
                         </option>
 
-                        <option value="Administrator">
-                            Administrator
-                        </option>
-
-                        <option value="Lab Manager">
-                            Lab Manager
-                        </option>
-
-                        <option value="Tester">
-                            Tester
-                        </option>
-        
-                        <option value="Quality Control">
-                            Quality Control
-                        </option>
+                        <?php foreach ($role_options as $roleName => $roleDescription): ?>
+                            <option value="<?php echo htmlspecialchars($roleName, ENT_QUOTES, 'UTF-8'); ?>"
+                                title="<?php echo htmlspecialchars($roleDescription, ENT_QUOTES, 'UTF-8'); ?>">
+                                <?php echo htmlspecialchars($roleName, ENT_QUOTES, 'UTF-8'); ?>
+                            </option>
+                        <?php endforeach; ?>
 
                     </select>
 
@@ -750,7 +690,7 @@ $users = mysqli_query(
                             <td>
 
 
-                                <?php if ($row["id"] == 1): ?>
+                                <?php if ((int) $row['id'] === (int) ($_SESSION['user_id'] ?? 0) || ((string) $row['role'] === 'Administrator' && $admin_users <= 1)): ?>
 
 
                                     <span class="protected">

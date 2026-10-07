@@ -1,5 +1,5 @@
 -- Initial relational schema for the Lab Automation System.
--- Run this migration once on the shared MySQL server; individual developers do not import a database dump.
+-- Shared deployments use the versioned migration runner; fresh local demos may import database/project_lab_db_import.sql.
 
 CREATE TABLE IF NOT EXISTS users (
     id INT NOT NULL AUTO_INCREMENT,

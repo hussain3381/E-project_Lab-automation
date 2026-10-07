@@ -1,3 +1,3 @@
 # Seed data
 
-Add non-sensitive demo-only SQL here after the ID component split is approved. Production credentials and real laboratory records must never be included in seed files.
+`001_demo.sql` contains disposable catalogue/sample records and four demonstration accounts. All demonstration accounts use `LabDemo@123` through a password hash. Do not include real laboratory records or production credentials in seed files; change/remove demo accounts before a shared or production deployment.

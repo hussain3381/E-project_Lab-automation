@@ -53,31 +53,25 @@ function csrf_is_valid(?string $submittedToken): bool
         && hash_equals((string) $_SESSION['csrf_token'], $submittedToken);
 }
 
+// Middleware is loaded after the session and CSRF helpers it calls are defined.
+require_once dirname(__DIR__) . '/middlewares/AuthMiddleware.php';
+require_once dirname(__DIR__) . '/middlewares/RoleMiddleware.php';
+require_once dirname(__DIR__) . '/middlewares/CsrfMiddleware.php';
+
 /**
- * Redirect unauthenticated users to the login screen.
+ * Keep the existing page API while delegating access checks to middleware.
  */
 function require_login(): void
 {
-    app_start_session();
-    if (empty($_SESSION['user_id'])) {
-        header('Location: login.php', true, 302);
-        exit;
-    }
+    AuthMiddleware::handle();
 }
 
 /**
- * Restrict a page to one or more named roles.
+ * Restrict a page to one or more named roles through role middleware.
  */
 function require_roles(array $allowedRoles): void
 {
-    require_login();
-    $userRole = (string) ($_SESSION['role'] ?? '');
-
-    if (!in_array($userRole, $allowedRoles, true)) {
-        http_response_code(403);
-        echo 'You do not have permission to access this page.';
-        exit;
-    }
+    RoleMiddleware::handle($allowedRoles);
 }
 
 /**

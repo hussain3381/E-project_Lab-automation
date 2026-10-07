@@ -102,9 +102,10 @@ $completed_percentage = $total_tests > 0
 ========================================================= */
 
 $user_name = $_SESSION['name'] ?? 'Administrator';
-
 $user_role = $_SESSION['role'] ?? 'Lab Manager';
-
+$is_admin = $user_role === 'Administrator';
+$can_manage_lab = in_array($user_role, ['Administrator', 'Lab Manager'], true);
+$can_manage_workflow = in_array($user_role, ['Administrator', 'Lab Manager', 'Quality Control'], true);
 
 /* User initials */
 
@@ -243,16 +244,12 @@ if ($user_initials == "") {
     </a>
 
 
-    <a href="test-types.php"
-       class="nav-link"
-       aria-label="Test Types"
-       title="Test Types">
-
-        <span class="nav-icon"><i class="fa-solid fa-vials" aria-hidden="true"></i></span>
-
+    <?php if ($can_manage_lab): ?>
+    <a href="test-types.php" class="nav-link">
+        <span class="nav-icon">◈</span>
         <span>Test Types</span>
-
     </a>
+    <?php endif; ?>
 
 
     <div class="nav-title">
@@ -284,33 +281,56 @@ if ($user_initials == "") {
     </a>
 
 
-    <a href="testers.php"
-       class="nav-link"
-       aria-label="Testers"
-       title="Testers">
-
-        <span class="nav-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
-
+    <?php if ($can_manage_lab): ?>
+    <a href="testers.php" class="nav-link">
+        <span class="nav-icon">♙</span>
         <span>Testers</span>
-
     </a>
+    <a href="departments.php" class="nav-link">
+        <span class="nav-icon">▦</span>
+        <span>Departments</span>
+    </a>
+    <?php endif; ?>
 
+    <?php if ($is_admin): ?>
+    <a href="product-catalog.php" class="nav-link">
+        <span class="nav-icon">▧</span>
+        <span>Product Catalog</span>
+    </a>
+    <a href="product-test-plan.php" class="nav-link">
+        <span class="nav-icon">☷</span>
+        <span>Family Test Plan</span>
+    </a>
+    <?php endif; ?>
+
+    <?php if ($can_manage_workflow): ?>
+    <a href="product-workflow.php" class="nav-link">
+        <span class="nav-icon">↻</span>
+        <span>Product Workflow</span>
+    </a>
+    <?php endif; ?>
 
     <div class="nav-title">
         System
     </div>
 
-
-    <a href="settings.php"
-       class="nav-link"
-       aria-label="Settings"
-       title="Settings">
-
-        <span class="nav-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
-
-        <span>Settings</span>
-
+    <?php if ($is_admin): ?>
+    <a href="users.php" class="nav-link">
+        <span class="nav-icon">♟</span>
+        <span>Users</span>
     </a>
+    <a href="roles.php" class="nav-link">
+        <span class="nav-icon">♜</span>
+        <span>Roles &amp; Access</span>
+    </a>
+    <?php endif; ?>
+
+    <?php if ($can_manage_lab): ?>
+    <a href="settings.php" class="nav-link">
+        <span class="nav-icon">⚙</span>
+        <span>Settings</span>
+    </a>
+    <?php endif; ?>
 
 
     <a href="logout.php"
@@ -556,7 +576,19 @@ if ($user_initials == "") {
 
     </section>
 
-
+    <?php if ($is_admin): ?>
+    <section class="admin-access-panel" aria-labelledby="admin-access-title">
+        <div>
+            <p class="admin-access-eyebrow">ADMINISTRATION</p>
+            <h2 id="admin-access-title">Users &amp; roles</h2>
+            <p>Create staff logins, assign one of the four approved roles, and review access boundaries.</p>
+        </div>
+        <div class="admin-access-actions">
+            <a href="users.php">Manage users <span aria-hidden="true">→</span></a>
+            <a href="roles.php">View roles <span aria-hidden="true">→</span></a>
+        </div>
+    </section>
+    <?php endif; ?>
 
     <!-- =========================
          CONTENT
