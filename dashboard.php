@@ -5,97 +5,62 @@ app_start_session();
 
 include "db.php";
 
+function dashboard_run_query(mysqli $connection, string $sql): mysqli_result
+{
+    try {
+        $result = mysqli_query($connection, $sql);
+    } catch (mysqli_sql_exception $exception) {
+        error_log('Dashboard query failed: ' . $exception->getMessage());
+        http_response_code(500);
+        exit('Dashboard data could not be loaded. Please try again later.');
+    }
+
+    if ($result === false) {
+        error_log('Dashboard query failed: ' . mysqli_error($connection));
+        http_response_code(500);
+        exit('Dashboard data could not be loaded. Please try again later.');
+    }
+
+    return $result;
+}
 
 /* =========================================================
    DASHBOARD DATABASE DATA
 ========================================================= */
 
-
-/* ---------- TOTAL PRODUCTS ---------- */
-
-$product_query = mysqli_query(
+/* One aggregate query keeps all dashboard counts consistent. */
+$summary_result = dashboard_run_query(
     $conn,
-    "SELECT COUNT(*) AS total FROM products"
+    "SELECT
+        (SELECT COUNT(*) FROM products) AS total_products,
+        COUNT(*) AS total_tests,
+        COALESCE(SUM(UPPER(status) = 'COMPLETED'), 0) AS completed_tests,
+        COALESCE(SUM(UPPER(status) = 'PENDING'), 0) AS pending_tests,
+        COALESCE(SUM(UPPER(status) = 'IN PROGRESS'), 0) AS in_progress_tests,
+        COALESCE(SUM(UPPER(result) = 'FAIL'), 0) AS failed_tests
+     FROM tests"
 );
+$summary = mysqli_fetch_assoc($summary_result);
 
-$product_data = mysqli_fetch_assoc($product_query);
+if ($summary === false) {
+    error_log('Dashboard summary query returned no row.');
+    http_response_code(500);
+    exit('Dashboard data could not be loaded. Please try again later.');
+}
 
-$total_products = $product_data['total'] ?? 0;
-
-
-/* ---------- TOTAL TESTS ---------- */
-
-$test_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total FROM tests"
-);
-
-$test_data = mysqli_fetch_assoc($test_query);
-
-$total_tests = $test_data['total'] ?? 0;
-
-
-/* ---------- COMPLETED TESTS ---------- */
-
-$completed_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM tests
-     WHERE status = 'Completed'"
-);
-
-$completed_data = mysqli_fetch_assoc($completed_query);
-
-$completed_tests = $completed_data['total'] ?? 0;
-
-
-/* ---------- PENDING TESTS ---------- */
-
-$pending_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM tests
-     WHERE status = 'Pending'"
-);
-
-$pending_data = mysqli_fetch_assoc($pending_query);
-
-$pending_tests = $pending_data['total'] ?? 0;
-
-
-/* ---------- FAILED TESTS ---------- */
-
-$failed_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM tests
-     WHERE result = 'FAIL'"
-);
-
-$failed_data = mysqli_fetch_assoc($failed_query);
-
-$failed_tests = $failed_data['total'] ?? 0;
-
-
-/* ---------- IN PROGRESS ---------- */
-
-$in_progress_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM tests
-     WHERE status = 'In Progress'"
-);
-
-$in_progress_data = mysqli_fetch_assoc($in_progress_query);
-
-$in_progress_tests = $in_progress_data['total'] ?? 0;
+$total_products = (int) $summary['total_products'];
+$total_tests = (int) $summary['total_tests'];
+$completed_tests = (int) $summary['completed_tests'];
+$pending_tests = (int) $summary['pending_tests'];
+$in_progress_tests = (int) $summary['in_progress_tests'];
+$failed_tests = (int) $summary['failed_tests'];
 
 
 /* =========================================================
    RECENT TESTING ACTIVITY
 ========================================================= */
 
-$recent_tests = mysqli_query(
+$recent_tests = dashboard_run_query(
     $conn,
     "SELECT
         tests.id,
@@ -120,39 +85,16 @@ $recent_tests = mysqli_query(
 );
 
 
-/* =========================================================
-   TESTING STATUS
-========================================================= */
-
-$total_for_status = $total_tests > 0 ? $total_tests : 1;
-
-
-/* Pending percentage */
-
-$pending_percentage = round(
-    ($pending_tests / $total_for_status) * 100
-);
-
-
-/* In Progress percentage */
-
-$in_progress_percentage = round(
-    ($in_progress_tests / $total_for_status) * 100
-);
-
-
-/* Completed percentage */
-
-$completed_percentage = round(
-    ($completed_tests / $total_for_status) * 100
-);
-
-
-/* Failed percentage */
-
-$failed_percentage = round(
-    ($failed_tests / $total_for_status) * 100
-);
+/* Failed is a test result, not a workflow status, so it is not part of this breakdown. */
+$pending_percentage = $total_tests > 0
+    ? (int) round(($pending_tests / $total_tests) * 100)
+    : 0;
+$in_progress_percentage = $total_tests > 0
+    ? (int) round(($in_progress_tests / $total_tests) * 100)
+    : 0;
+$completed_percentage = $total_tests > 0
+    ? (int) round(($completed_tests / $total_tests) * 100)
+    : 0;
 
 
 /* =========================================================
@@ -199,6 +141,7 @@ if ($user_initials == "") {
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
     <meta charset="UTF-8">
 
@@ -245,7 +188,7 @@ if ($user_initials == "") {
     <div class="brand">
 
         <div class="brand-icon">
-            ⚡
+            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
         </div>
 
         <div class="brand-text">
@@ -265,9 +208,11 @@ if ($user_initials == "") {
 
 
     <a href="dashboard.php"
-       class="nav-link active">
+       class="nav-link active"
+       aria-label="Dashboard"
+       title="Dashboard">
 
-        <span class="nav-icon">⌂</span>
+        <span class="nav-icon"><i class="fa-solid fa-house" aria-hidden="true"></i></span>
 
         <span>Dashboard</span>
 
@@ -275,9 +220,11 @@ if ($user_initials == "") {
 
 
     <a href="products.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Products"
+       title="Products">
 
-        <span class="nav-icon">▣</span>
+        <span class="nav-icon"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i></span>
 
         <span>Products</span>
 
@@ -285,9 +232,11 @@ if ($user_initials == "") {
 
 
     <a href="testing.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Testing"
+       title="Testing">
 
-        <span class="nav-icon">⌁</span>
+        <span class="nav-icon"><i class="fa-solid fa-flask" aria-hidden="true"></i></span>
 
         <span>Testing</span>
 
@@ -295,9 +244,11 @@ if ($user_initials == "") {
 
 
     <a href="test-types.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Test Types"
+       title="Test Types">
 
-        <span class="nav-icon">◈</span>
+        <span class="nav-icon"><i class="fa-solid fa-vials" aria-hidden="true"></i></span>
 
         <span>Test Types</span>
 
@@ -310,9 +261,11 @@ if ($user_initials == "") {
 
 
     <a href="search.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Advanced Search"
+       title="Advanced Search">
 
-        <span class="nav-icon">⌕</span>
+        <span class="nav-icon"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></span>
 
         <span>Advanced Search</span>
 
@@ -320,9 +273,11 @@ if ($user_initials == "") {
 
 
     <a href="reports.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Reports"
+       title="Reports">
 
-        <span class="nav-icon">▥</span>
+        <span class="nav-icon"><i class="fa-solid fa-chart-column" aria-hidden="true"></i></span>
 
         <span>Reports</span>
 
@@ -330,9 +285,11 @@ if ($user_initials == "") {
 
 
     <a href="testers.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Testers"
+       title="Testers">
 
-        <span class="nav-icon">♙</span>
+        <span class="nav-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
 
         <span>Testers</span>
 
@@ -345,9 +302,11 @@ if ($user_initials == "") {
 
 
     <a href="settings.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Settings"
+       title="Settings">
 
-        <span class="nav-icon">⚙</span>
+        <span class="nav-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
 
         <span>Settings</span>
 
@@ -355,9 +314,11 @@ if ($user_initials == "") {
 
 
     <a href="logout.php"
-       class="nav-link">
+       class="nav-link"
+       aria-label="Logout"
+       title="Logout">
 
-        <span class="nav-icon">↪</span>
+        <span class="nav-icon"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></span>
 
         <span>Logout</span>
 
@@ -460,7 +421,7 @@ if ($user_initials == "") {
                 </span>
 
                 <div class="stat-icon">
-                    ▣
+                    <i class="fa-solid fa-box" aria-hidden="true"></i>
                 </div>
 
             </div>
@@ -496,7 +457,7 @@ if ($user_initials == "") {
                 </span>
 
                 <div class="stat-icon">
-                    ✓
+                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
                 </div>
 
             </div>
@@ -532,7 +493,7 @@ if ($user_initials == "") {
                 </span>
 
                 <div class="stat-icon">
-                    ◷
+                    <i class="fa-solid fa-clock" aria-hidden="true"></i>
                 </div>
 
             </div>
@@ -568,7 +529,7 @@ if ($user_initials == "") {
                 </span>
 
                 <div class="stat-icon">
-                    !
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
                 </div>
 
             </div>
@@ -620,12 +581,12 @@ if ($user_initials == "") {
                     href="testing.php"
                     class="view-all"
                 >
-                    View all →
+                    View all <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                 </a>
 
             </div>
 
-
+            <div class="table-scroll">
             <table>
 
                 <thead>
@@ -687,7 +648,9 @@ if ($user_initials == "") {
 
                                 <?php
                                 echo htmlspecialchars(
-                                    $row['product_id']
+                                    (string) ($row['product_name'] ?: $row['product_id']),
+                                    ENT_QUOTES,
+                                    'UTF-8'
                                 );
                                 ?>
 
@@ -698,8 +661,9 @@ if ($user_initials == "") {
 
                                 <?php
                                 echo htmlspecialchars(
-                                    $row['test_name']
-                                    ?? 'N/A'
+                                    (string) ($row['test_name'] ?? 'N/A'),
+                                    ENT_QUOTES,
+                                    'UTF-8'
                                 );
                                 ?>
 
@@ -779,6 +743,7 @@ if ($user_initials == "") {
                 </tbody>
 
             </table>
+            </div>
 
 
         </div>
@@ -817,9 +782,7 @@ if ($user_initials == "") {
                         </span>
 
                         <span>
-                            <?php
-                            echo $pending_percentage;
-                            ?>%
+                            <?php echo number_format($pending_tests); ?> · <?php echo $pending_percentage; ?>%
                         </span>
 
                     </div>
@@ -856,9 +819,7 @@ if ($user_initials == "") {
                         </span>
 
                         <span>
-                            <?php
-                            echo $in_progress_percentage;
-                            ?>%
+                            <?php echo number_format($in_progress_tests); ?> · <?php echo $in_progress_percentage; ?>%
                         </span>
 
                     </div>
@@ -895,9 +856,7 @@ if ($user_initials == "") {
                         </span>
 
                         <span>
-                            <?php
-                            echo $completed_percentage;
-                            ?>%
+                            <?php echo number_format($completed_tests); ?> · <?php echo $completed_percentage; ?>%
                         </span>
 
                     </div>
@@ -912,45 +871,6 @@ if ($user_initials == "") {
                                 <?php
                                 echo min(
                                     $completed_percentage,
-                                    100
-                                );
-                                ?>%;
-                            "
-                        ></div>
-
-                    </div>
-
-                </div>
-
-
-                <!-- FAILED -->
-
-                <div class="status-item">
-
-                    <div class="status-row">
-
-                        <span>
-                            Failed Tests
-                        </span>
-
-                        <span>
-                            <?php
-                            echo $failed_percentage;
-                            ?>%
-                        </span>
-
-                    </div>
-
-
-                    <div class="progress">
-
-                        <div
-                            class="progress-bar"
-                            style="
-                                width:
-                                <?php
-                                echo min(
-                                    $failed_percentage,
                                     100
                                 );
                                 ?>%;
@@ -984,7 +904,7 @@ if ($user_initials == "") {
         >
 
             <div class="action-icon">
-                +
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
             </div>
 
 
@@ -1007,7 +927,7 @@ if ($user_initials == "") {
         >
 
             <div class="action-icon">
-                ⚡
+                <i class="fa-solid fa-vial" aria-hidden="true"></i>
             </div>
 
 
@@ -1030,7 +950,7 @@ if ($user_initials == "") {
         >
 
             <div class="action-icon">
-                ⌕
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
             </div>
 
 

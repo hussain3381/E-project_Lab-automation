@@ -88,6 +88,7 @@ if ($user_initials === "") {
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
 <meta charset="UTF-8">
 
@@ -136,7 +137,7 @@ if ($user_initials === "") {
     <div class="brand">
 
         <div class="brand-icon">
-            ⚡
+            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
         </div>
 
         <div class="brand-text">
@@ -273,7 +274,7 @@ if ($user_initials === "") {
         >
 
             <span class="nav-icon">
-                ⚙
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
             </span>
 
             Settings

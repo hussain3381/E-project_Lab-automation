@@ -198,6 +198,7 @@ if (mysqli_num_rows($check_table) > 0) {
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
 <meta charset="UTF-8">
 
@@ -240,7 +241,7 @@ if (mysqli_num_rows($check_table) > 0) {
     <div class="brand">
 
         <div class="brand-icon">
-            ⚡
+            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
         </div>
 
         <div>
@@ -293,7 +294,7 @@ if (mysqli_num_rows($check_table) > 0) {
         <a href="testing.php"
            class="nav-link">
 
-            <span class="nav-icon">⚗</span>
+            <span class="nav-icon"><i class="fa-solid fa-flask" aria-hidden="true"></i></span>
 
             <span>Testing</span>
 
@@ -363,7 +364,7 @@ if (mysqli_num_rows($check_table) > 0) {
         <a href="testers.php"
            class="nav-link">
 
-            <span class="nav-icon">♙</span>
+            <span class="nav-icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
 
             <span>Testers</span>
 
@@ -373,7 +374,7 @@ if (mysqli_num_rows($check_table) > 0) {
         <a href="settings.php"
            class="nav-link active">
 
-            <span class="nav-icon">⚙</span>
+            <span class="nav-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
 
             <span>Settings</span>
 
@@ -611,7 +612,7 @@ if (mysqli_num_rows($check_table) > 0) {
         <div class="info-card">
 
             <div class="icon">
-                ⚙️
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
             </div>
 
             <h4>
@@ -631,7 +632,7 @@ if (mysqli_num_rows($check_table) > 0) {
         <div class="info-card">
 
             <div class="icon">
-                🧪
+                <i class="fa-solid fa-flask" aria-hidden="true"></i>
             </div>
 
             <h4>
@@ -651,7 +652,7 @@ if (mysqli_num_rows($check_table) > 0) {
         <div class="info-card">
 
             <div class="icon">
-                🔐
+                <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
             </div>
 
             <h4>
