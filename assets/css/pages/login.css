@@ -11,7 +11,7 @@
 
         body {
             min-height: 100vh;
-            font-family: "Inter", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
             background: var(--legacy-color-071014);
             color: var(--legacy-color-ffffff);
             overflow: hidden;
@@ -234,7 +234,7 @@
         }
 
         .brand-text h2 {
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
             font-size: 18px;
             letter-spacing: 0.5px;
         }
@@ -251,7 +251,7 @@
         /* Heading */
 
         .intro h1 {
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
             font-size: clamp(38px, 4vw, 58px);
             line-height: 1.05;
             letter-spacing: -2px;
@@ -323,7 +323,7 @@
         }
 
         .login-header h2 {
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
             font-size: 32px;
             letter-spacing: -1px;
             margin-bottom: 8px;
@@ -381,7 +381,7 @@
             padding: 0 45px;
             outline: none;
 
-            font-family: "Inter", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
             font-size: 13px;
 
             transition: 0.25s ease;
@@ -475,7 +475,7 @@
             background: var(--legacy-color-48d7c4);
             color: var(--legacy-color-061110);
 
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
             font-size: 14px;
             font-weight: 700;
 

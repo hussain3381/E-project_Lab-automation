@@ -3,9 +3,15 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
-require_roles(['Administrator', 'Lab Manager', 'Quality Control', 'Tester']);
+require_page_access(__FILE__);
 require_once __DIR__ . "/models/TestIdGenerator.php";
 require_once __DIR__ . "/models/ProductWorkflow.php";
+require_once __DIR__ . "/models/Tester.php";
+
+$currentRole = (string) ($_SESSION['role'] ?? 'Tester');
+$currentTesterProfile = $currentRole === 'Tester'
+    ? Tester::findByUserId($conn, (int) ($_SESSION['user_id'] ?? 0))
+    : null;
 
 $message = "";
 $message_type = "";
@@ -18,6 +24,10 @@ if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST") {
         $rawTesterIds = [$rawTesterIds];
     }
     $tester_ids = array_values(array_unique(array_filter(array_map('intval', $rawTesterIds), static fn (int $id): bool => $id > 0)));
+    // A Tester can only submit under their own linked profile, even if a request is tampered with.
+    if ($currentRole === 'Tester') {
+        $tester_ids = $currentTesterProfile !== null ? [(int) $currentTesterProfile['id']] : [];
+    }
     $testing_date = trim((string) ($_POST['testing_date'] ?? ''));
     $criteria = trim((string) ($_POST['criteria'] ?? ''));
     $expected_output = trim((string) ($_POST['expected_output'] ?? ''));
@@ -69,8 +79,25 @@ if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST") {
             $selectedTesters[] = $testersById[$testerId];
         }
 
+        $testerMayAccessProduct = $currentRole !== 'Tester';
+        if ($currentRole === 'Tester' && $currentTesterProfile !== null && $product) {
+            $assignmentCheck = $conn->prepare(
+                'SELECT 1 FROM tests AS assigned_test WHERE assigned_test.product_id = ? AND (' .
+                'assigned_test.tester_id = ? OR EXISTS (SELECT 1 FROM test_participants AS assigned_participant ' .
+                'WHERE assigned_participant.test_record_id = assigned_test.id AND assigned_participant.tester_id = ?)) LIMIT 1'
+            );
+            $ownTesterId = (int) $currentTesterProfile['id'];
+            $assignmentCheck->bind_param('sii', $product_id, $ownTesterId, $ownTesterId);
+            $assignmentCheck->execute();
+            $testerMayAccessProduct = $assignmentCheck->get_result()->num_rows > 0;
+            $assignmentCheck->close();
+        }
+
         if (!$product) {
             $message = "Selected product was not found.";
+            $message_type = "error";
+        } elseif (!$testerMayAccessProduct) {
+            $message = "Testers can only record work for products linked to their assigned test records.";
             $message_type = "error";
         } elseif (!$testType || !preg_match('/^\d{3}$/', (string) ($testType['numeric_code'] ?? ''))) {
             $message = "Selected test type is inactive or has no valid three-digit numeric ID code.";
@@ -195,16 +222,49 @@ if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST") {
     }
 }
 
-$products = $conn->query(
-    "SELECT product_id, product_name, product_code, revision, status FROM products ORDER BY id DESC"
-);
+if ($currentRole === 'Tester') {
+    if ($currentTesterProfile !== null) {
+        $assignedProducts = $conn->prepare(
+            'SELECT DISTINCT p.product_id, p.product_name, p.product_code, p.revision, p.status '
+            . 'FROM products AS p INNER JOIN tests AS assigned_test ON assigned_test.product_id = p.product_id '
+            . 'WHERE assigned_test.tester_id = ? OR EXISTS ('
+            . 'SELECT 1 FROM test_participants AS assigned_participant '
+            . 'WHERE assigned_participant.test_record_id = assigned_test.id AND assigned_participant.tester_id = ?) '
+            . 'ORDER BY p.product_id DESC'
+        );
+        $ownTesterId = (int) $currentTesterProfile['id'];
+        $assignedProducts->bind_param('ii', $ownTesterId, $ownTesterId);
+        $assignedProducts->execute();
+        $products = $assignedProducts->get_result();
+    } else {
+        $products = $conn->query('SELECT product_id, product_name, product_code, revision, status FROM products WHERE 1 = 0');
+    }
+} else {
+    $products = $conn->query(
+        "SELECT product_id, product_name, product_code, revision, status FROM products ORDER BY id DESC"
+    );
+}
 $test_types = $conn->query(
     "SELECT id, test_code, numeric_code, test_name, department FROM test_types " .
     "WHERE is_active = 1 ORDER BY id ASC"
 );
-$testers = $conn->query(
-    "SELECT id, name, department, designation FROM testers WHERE is_active = 1 ORDER BY name ASC"
-);
+if ($currentRole === 'Tester') {
+    if ($currentTesterProfile !== null) {
+        $testerStatement = $conn->prepare(
+            'SELECT id, name, department, designation FROM testers WHERE id = ? AND is_active = 1'
+        );
+        $ownTesterId = (int) $currentTesterProfile['id'];
+        $testerStatement->bind_param('i', $ownTesterId);
+        $testerStatement->execute();
+        $testers = $testerStatement->get_result();
+    } else {
+        $testers = false;
+    }
+} else {
+    $testers = $conn->query(
+        "SELECT id, name, department, designation FROM testers WHERE is_active = 1 ORDER BY name ASC"
+    );
+}
 ?>
 <!DOCTYPE html>
 
@@ -237,58 +297,7 @@ $testers = $conn->query(
      SIDEBAR
 ========================= -->
 
-<div class="sidebar">
-
-    <div class="logo">
-
-        <h2>LAB AUTOMATION</h2>
-
-        <p>Electrical Testing System</p>
-
-    </div>
-
-
-    <div class="menu">
-
-        <a href="dashboard.php">
-            Dashboard
-        </a>
-
-        <a href="products.php">
-            Products
-        </a>
-
-        <a href="testing.php" class="active">
-            Testing
-        </a>
-
-        <a href="test-types.php">
-            Test Types
-        </a>
-
-        <a href="search.php">
-            Advanced Search
-        </a>
-
-        <a href="reports.php">
-            Reports
-        </a>
-
-        <a href="testers.php">
-            Testers
-        </a>
-
-        <a href="settings.php">
-            Settings
-        </a>
-
-        <a href="login.php">
-            Logout
-        </a>
-
-    </div>
-
-</div>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 <!-- =========================
@@ -456,46 +465,20 @@ $testers = $conn->query(
                         </label>
 
 
-                        <select
-                            name="tester_ids[]"
-                            multiple
-                            size="4"
-                            required
-                        >
-
-                            <option value="">
-                                Select one or more testers (Ctrl/Cmd-click)
-                            </option>
-
-
-                            <?php while (
-                                $tester =
-                                mysqli_fetch_assoc($testers)
-                            ): ?>
-
-                                <option
-                                    value="<?php echo $tester['id']; ?>"
-                                >
-
-                                    <?php
-                                    echo htmlspecialchars(
-                                        $tester['name']
-                                    );
-                                    ?>
-
-                                    -
-                                    <?php
-                                    echo htmlspecialchars(
-                                        $tester['designation']
-                                    );
-                                    ?>
-
-                                </option>
-
-                            <?php endwhile; ?>
-
-                        </select>
-                        <small>Choose all participants; the selected test type routes the record to its department.</small>
+                        <?php if ($currentRole === 'Tester' && $currentTesterProfile !== null): ?>
+                            <input type="hidden" name="tester_ids[]" value="<?php echo (int) $currentTesterProfile['id']; ?>">
+                            <input type="text" value="<?php echo htmlspecialchars((string) $currentTesterProfile['name'], ENT_QUOTES, 'UTF-8'); ?>" readonly aria-label="Your linked tester profile">
+                            <small>Your test record will be linked to your staff profile.</small>
+                        <?php elseif ($currentRole === 'Tester'): ?>
+                            <p class="form-hint">Your account needs a linked tester profile. Contact a Lab Manager.</p>
+                        <?php else: ?>
+                            <select name="tester_ids[]" multiple size="4" required>
+                                <?php while ($tester = mysqli_fetch_assoc($testers)): ?>
+                                    <option value="<?php echo (int) $tester['id']; ?>"><?php echo htmlspecialchars((string) $tester['name'] . ' — ' . (string) $tester['designation'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                <?php endwhile; ?>
+                            </select>
+                            <small>Choose all participants; the selected test type routes the record to its department.</small>
+                        <?php endif; ?>
 
                     </div>
 

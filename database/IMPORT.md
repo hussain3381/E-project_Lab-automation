@@ -25,11 +25,12 @@ Change these passwords or remove the accounts before using any real records. The
 
 ## Existing database warning
 
-The full import is for a new/empty database. It does **not** drop existing tables, but `CREATE TABLE IF NOT EXISTS` cannot repair an old table definition. If you already have tables or data, make a backup first, then run the versioned upgrade instead:
+The import is idempotent for the supplied schema and uses `INSERT IGNORE` for demo records. It does **not** drop existing tables or rows. Its compatibility block adds known missing columns, but `CREATE TABLE IF NOT EXISTS` cannot repair every custom/legacy table definition. For a database that already has real or shared data, back it up and review the migration plan; prefer the versioned CLI migration and seed only a disposable local database:
 
 ```bash
 php scripts/migrate.php
+# Optional, only for a throwaway/demo database:
 php scripts/seed_demo.php
 ```
 
-Do not import this dump into real laboratory data without a backup and a reviewed migration plan. Do not overwrite a teammate's `.env` or use shared root credentials.
+After importing into an existing database, run `php scripts/migrate.php` so the runner can add the safe indexes/foreign keys and verify the compatibility fields. Do not import demo rows into real laboratory data without a backup and reviewed migration plan. Do not overwrite a teammate's `.env` or use shared root credentials.

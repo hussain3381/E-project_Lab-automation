@@ -1,20 +1,12 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <script>/* Restore the saved palette before painting the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Product Test Plan | Lab Automation</title>
-    <link rel="stylesheet" href="assets/compiled/app.css">
-    <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="assets/css/pages/product-test-plan.css">
-</head>
-<body class="test-plan-page">
-    <main class="test-plan-shell">
-        <header class="test-plan-header">
-            <div><p class="test-plan-eyebrow">ADMIN / WORKFLOW SETUP</p><h1>Product Test Plans</h1><p>Choose the tests required for each product family. CPRI readiness is blocked until every required test in the current cycle has passed.</p></div>
-            <a href="test-types.php">Back to Test Types</a>
-        </header>
+<?php
+$pageTitle = 'Family test plans';
+$pageEyebrow = 'ADMIN / WORKFLOW SETUP';
+$pageDescription = 'Choose required tests for each product family and control the CPRI readiness gate.';
+$pageStylesheet = 'assets/css/pages/product-test-plan.css';
+$pageActionHtml = '<a class="button button-quiet" href="test-types.php">Back to test types</a>' ;
+require __DIR__ . '/../layouts/app_start.php';
+?>
+<div class="test-plan-shell">
         <?php if ($planState['message'] !== ''): ?><div class="test-plan-alert test-plan-alert--success" role="status"><?php echo htmlspecialchars($planState['message'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
         <?php if ($planState['error'] !== ''): ?><div class="test-plan-alert test-plan-alert--error" role="alert"><?php echo htmlspecialchars($planState['error'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
         <section class="test-plan-card">
@@ -52,6 +44,5 @@
             <?php endif; ?>
         </section>
         <aside class="test-plan-note"><strong>Workflow:</strong> a FAIL sends the product to re-manufacture and starts a new test cycle after release. CPRI handoff is manual; this app does not call an external API.</aside>
-    </main>
-</body>
-</html>
+    </div>
+<?php require __DIR__ . '/../layouts/app_end.php'; ?>

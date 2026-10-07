@@ -1,25 +1,12 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Product Catalog | Lab Automation</title>
-    <link rel="stylesheet" href="assets/compiled/app.css">
-    <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="assets/css/pages/product-catalog.css">
-</head>
-<body class="catalog-page">
-    <main class="catalog-shell">
-        <header class="catalog-header">
-            <div>
-                <p class="catalog-eyebrow">ADMIN / CONFIGURATION</p>
-                <h1>Product Catalog</h1>
-                <p class="catalog-lede">Set up product families and map each exact product code to its two-digit ID segment.</p>
-            </div>
-            <a class="catalog-link" href="settings.php">Back to settings</a>
-        </header>
-
+<?php
+$pageTitle = 'Product catalog';
+$pageEyebrow = 'ADMIN / CONFIGURATION';
+$pageDescription = 'Set up product families and exact model codes used to create safe product IDs.';
+$pageStylesheet = 'assets/css/pages/product-catalog.css';
+$pageActionHtml = '<a class="button button-quiet" href="settings.php">Back to settings</a>' ;
+require __DIR__ . '/../layouts/app_start.php';
+?>
+<div class="catalog-shell">
         <?php if ($message !== ''): ?>
             <div class="catalog-alert catalog-alert--success" role="status"><?php echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></div>
         <?php endif; ?>
@@ -107,6 +94,5 @@
         <aside class="catalog-note">
             <strong>ID rule chosen for this sprint:</strong> Product ID = product-code numeric segment (2 digits) + revision (2 digits) + manufacturing sequence (6 digits). The numeric code maps to the exact product code/model, not just the family.
         </aside>
-    </main>
-</body>
-</html>
+    </div>
+<?php require __DIR__ . '/../layouts/app_end.php'; ?>

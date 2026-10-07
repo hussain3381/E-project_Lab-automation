@@ -15,11 +15,11 @@
 ========================= */
 
 body {
-    font-family: Arial, sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     background: var(--legacy-color-081514);
 
-    color: white;
+    color: var(--theme-text);
 }
 
 
@@ -240,7 +240,7 @@ textarea {
 
     border: 1px solid var(--legacy-color-28514c);
 
-    color: white;
+    color: var(--theme-text);
 
     padding: 12px;
 
@@ -248,7 +248,7 @@ textarea {
 
     outline: none;
 
-    font-family: Arial, sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 13px;
 }
@@ -268,7 +268,7 @@ textarea:focus {
 select option {
     background: var(--legacy-color-0d211f);
 
-    color: white;
+    color: var(--theme-text);
 }
 
 

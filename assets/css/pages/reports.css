@@ -16,7 +16,7 @@
 
 body {
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     background: var(--legacy-color-071014);
 
@@ -96,7 +96,7 @@ body {
 
 .brand-text {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 15px;
 
@@ -343,7 +343,7 @@ body {
 
 .header h1 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 29px;
 
@@ -423,7 +423,7 @@ body {
 
 .summary-card h2 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 28px;
 
@@ -485,7 +485,7 @@ body {
 
 .card-header h2 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 16px;
 
@@ -568,7 +568,7 @@ body {
 
     z-index: 2;
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 24px;
 
@@ -578,7 +578,7 @@ body {
 
 .rate-info h3 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 15px;
 
@@ -764,7 +764,7 @@ tr:hover td {
 
     color: var(--legacy-color-48d7c4);
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-weight: 700;
 }

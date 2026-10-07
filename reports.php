@@ -1,6 +1,7 @@
 <?php
 
 include "db.php";
+require_page_access(__FILE__);
 
 
 /* =========================
@@ -219,7 +220,6 @@ if ($total_tests > 0) {
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
 <meta charset="UTF-8">
 
@@ -233,18 +233,6 @@ if ($total_tests > 0) {
 
 <!-- GOOGLE FONTS -->
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-
-<link rel="preconnect"
-      href="https://fonts.gstatic.com"
-      crossorigin>
-
-<link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-    rel="stylesheet"
->
-
-
 <link rel="stylesheet" href="assets/css/pages/reports.css">
 
 </head>
@@ -257,221 +245,7 @@ if ($total_tests > 0) {
      SIDEBAR
 ========================= -->
 
-<aside class="sidebar">
-
-
-    <!-- BRAND -->
-
-    <div class="brand">
-
-        <div class="brand-icon">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-        </div>
-
-        <div>
-
-            <div class="brand-text">
-                LAB AUTOMATION
-            </div>
-
-            <div class="brand-subtitle">
-                Electrical Testing
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- NAV TITLE -->
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-
-    <!-- NAVIGATION -->
-
-    <nav>
-
-
-        <a
-            href="dashboard.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌂
-            </span>
-
-            <span>
-                Dashboard
-            </span>
-
-        </a>
-
-
-        <a
-            href="products.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ▣
-            </span>
-
-            <span>
-                Products
-            </span>
-
-        </a>
-
-
-        <a
-            href="testing.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                <i class="fa-solid fa-flask" aria-hidden="true"></i>
-            </span>
-
-            <span>
-                Testing
-            </span>
-
-        </a>
-
-
-        <a
-            href="test-types.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◈
-            </span>
-
-            <span>
-                Test Types
-            </span>
-
-        </a>
-
-
-        <a
-            href="search.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌕
-            </span>
-
-            <span>
-                Advanced Search
-            </span>
-
-        </a>
-
-
-        <a
-            href="reports.php"
-            class="nav-link active"
-        >
-
-            <span class="nav-icon">
-                ▤
-            </span>
-
-            <span>
-                Reports
-            </span>
-
-        </a>
-
-
-        <a
-            href="testers.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◎
-            </span>
-
-            <span>
-                Testers
-            </span>
-
-        </a>
-
-
-        <a
-            href="settings.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                <i class="fa-solid fa-gear" aria-hidden="true"></i>
-            </span>
-
-            <span>
-                Settings
-            </span>
-
-        </a>
-
-
-    </nav>
-
-
-    <!-- SIDEBAR BOTTOM -->
-
-    <div class="sidebar-bottom">
-
-
-        <div class="user-box">
-
-            <div class="user-avatar">
-                LA
-            </div>
-
-            <div class="user-info">
-
-                <strong>
-                    Lab Administrator
-                </strong>
-
-                <span>
-                    Administrator
-                </span>
-
-            </div>
-
-        </div>
-
-
-        <a
-            href="logout.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
-            </span>
-
-            <span>
-                Logout
-            </span>
-
-        </a>
-
-
-    </div>
-
-
-</aside>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 

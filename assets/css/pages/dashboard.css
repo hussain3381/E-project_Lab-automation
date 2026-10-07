@@ -8,7 +8,7 @@
 
         body {
 
-            font-family: "Inter", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
 
             background: var(--legacy-color-071014);
 
@@ -87,7 +87,7 @@
 
         .brand h2 {
 
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
 
             font-size: 15px;
         }
@@ -296,7 +296,7 @@
 
         .welcome h1 {
 
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
 
             font-size: 29px;
 
@@ -445,7 +445,7 @@
 
         .stat-number {
 
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
 
             font-size: 31px;
 
@@ -513,7 +513,7 @@
 
         .panel-header h3 {
 
-            font-family: "Space Grotesk", sans-serif;
+            font-family: var(--theme-font-sans, Inter, sans-serif);
 
             font-size: 14px;
         }

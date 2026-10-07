@@ -5,9 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "check:js": "node --check assets/js/theme.js"
+    "check:js": "node --check assets/js/theme.js && node --check resources/js/app-ui.js"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3",
     "vite": "^8.3.2"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fortawesome/fontawesome-free": "^7.3.1"
   }
 }

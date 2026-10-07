@@ -43,9 +43,12 @@ Baseline GitHub repo dark-teal PHP screens, product/test forms, advanced search 
 - Product families, exact product-code mappings, departments aur product-family test plan ke admin screens.
 - Test entry: criteria/expected/actual/result/date; multi-tester participants; department ID; test-cycle assignment.
 - PASS/FAIL/pending state updates; failure → re-manufacture status → manual release for retest; all required tests current cycle mein pass hon to `CPRI Ready`; manual CPRI handoff audit without API integration.
-- Clean install + idempotent migrate + legacy-shaped schema migration + demo seed checks pass huay. ID generator, concurrent roll allocation, product/test form, multi-tester, failure/rework/retest aur CPRI gate ka HTTP smoke test bhi pass hua.
+- Role-specific Administrator/Lab Manager/Tester/Quality Control dashboards and one route-role policy; forbidden links hide hote hain aur protected routes server-side 403 return karte hain. Tester dashboard/list/detail/search linked profile aur participant assignments se scoped hain.
+- Shared authenticated shell/reusable cards/tables/forms ab dashboard, testing, product register, product catalogue, family plan, aur workflow views mein use ho raha hai. Public landing/About/Contact/Login/Register bhi shared public shell use karte hain; registration only Tester account + profile banata hai; contact message database mein save hota hai (email delivery nahi). Tailwind/Vite, locally bundled Inter + Font Awesome, modest reveal/hero motion, aur reduced-motion fallback included hain.
+- Authenticated request par active state/role DB se refresh hota hai; 8-hour idle expiry, CSRF, password hashing, session regeneration retained hain.
+- Fresh import, versioned migration, idempotent rerun, demo seed, `php -l`, JS check/Vite build aur 4 roles ke HTTP route-scope smoke checks pass huay. Public register/contact, role revalidation, Test ID allocation aur Tester assignment boundary bhi verify huay.
 
-**Abhi baqi / review:** edit-product aur purane CRUD pages ko generated ID policy se align karna; advanced search/list/detail mein participants, department, cycle aur CPRI data achhi tarah dikhana; workflow race/error/role tests; broader MVC migration; Aiven service abhi create/connect nahi hua. Production certification scope mein nahi.
+**Abhi baqi / review:** remaining legacy CRUD screens ko shared shell/content styles mein migrate karna; edit-product aur old forms ko full ID/workflow policy ke against review karna; browser-based responsive, keyboard, contrast, and theme persistence checks; teammate acceptance rerun; Aiven service abhi create/connect nahi hua. Production certification scope mein nahi.
 
 ## 5 din ke tasks — clear ownership
 
@@ -82,6 +85,9 @@ Baseline GitHub repo dark-teal PHP screens, product/test forms, advanced search 
 - Test plan ke tamam required tests current cycle mein PASS hon tabhi CPRI handoff action chalta hai.
 - FAIL se re-manufacture status lagta hai; rework release ke baad next cycle mein retest hota hai; previous history delete nahi hoti.
 - Product ID aur Test ID se search, plus advanced filters, kaam karte hain.
+- Har role ko sirf allowed tabs/actions dikhte hain; direct URL par bhi role guard 403 deta hai. Tester ki lists/details/search unke own assignments tak scoped hain.
+- Public registration sirf Tester + linked profile banati hai; contact form message save karta hai aur email send hone ka claim nahi karta.
+- Dashboard, testing page, product register/catalog, test-plan aur workflow ek shared responsive shell/components use karte hain.
 - Dark/light choice pages ke darmiyan persist hoti hai; page CSS shared variables use karti hai.
 - Shared DB par migrations one-time/idempotent hon; developers private `.env` se same remote DB ko use karen; credentials Git/chat mein nahi.
 

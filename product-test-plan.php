@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
-require_roles(['Administrator']);
+require_page_access(__FILE__);
 require_once __DIR__ . '/controllers/ProductTestPlanController.php';
 
 $planState = product_test_plan_save($conn);

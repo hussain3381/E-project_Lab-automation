@@ -73,6 +73,11 @@ INSERT IGNORE INTO users (name, username, password, role, is_active) VALUES
     ('Test Engineer', 'tester', '$2y$12$V53AREmVvWnds7Bzx0fcaeFfxOQFD44MSLY.jYqDMXMXx09zMymwy', 'Tester', 1),
     ('Quality Control', 'quality', '$2y$12$V53AREmVvWnds7Bzx0fcaeFfxOQFD44MSLY.jYqDMXMXx09zMymwy', 'Quality Control', 1);
 
+UPDATE testers AS t
+INNER JOIN users AS u ON u.username = 'tester'
+SET t.user_id = u.id
+WHERE t.id = 1 AND t.user_id IS NULL;
+
 -- Explicit parentheses around the column list and VALUES block keep this phpMyAdmin-friendly.
 INSERT IGNORE INTO `products` (
     `id`, `product_id`, `product_code`, `product_code_id`, `product_code_numeric`,

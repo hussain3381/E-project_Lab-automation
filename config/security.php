@@ -75,6 +75,42 @@ function require_roles(array $allowedRoles): void
 }
 
 /**
+ * Load the shared route-role map used by the navigation and endpoint guards.
+ */
+function app_route_permissions(): array
+{
+    static $permissions = null;
+    if ($permissions === null) {
+        $permissions = require __DIR__ . '/permissions.php';
+    }
+
+    return $permissions;
+}
+
+/**
+ * Check whether the signed-in role may open a route without exposing denied links.
+ */
+function app_can_access_route(string $route, ?string $role = null): bool
+{
+    $route = basename($route);
+    $role ??= (string) ($_SESSION['role'] ?? '');
+    $allowedRoles = app_route_permissions()[$route] ?? [];
+
+    return $role !== '' && in_array($role, $allowedRoles, true);
+}
+
+/**
+ * Guard a page using the same role matrix that controls its sidebar link.
+ */
+function require_page_access(string $route): void
+{
+    AuthMiddleware::handle();
+    $route = basename($route);
+    $allowedRoles = app_route_permissions()[$route] ?? [];
+    RoleMiddleware::handle($allowedRoles);
+}
+
+/**
  * Clear session data and expire the browser cookie on logout.
  */
 function app_logout_session(): void

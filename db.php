@@ -23,3 +23,22 @@ try {
     echo '<!doctype html><html lang="en"><meta charset="utf-8"><title>Database unavailable</title><body><h1>Database unavailable</h1><p>' . $publicMessage . '</p></body></html>';
     exit;
 }
+
+// Re-check role and active state on every authenticated request so admin changes take effect immediately.
+$accountCheck = $conn->prepare('SELECT id, name, username, email, role, is_active FROM users WHERE id = ? LIMIT 1');
+$accountId = (int) ($_SESSION['user_id'] ?? 0);
+$accountCheck->bind_param('i', $accountId);
+$accountCheck->execute();
+$account = $accountCheck->get_result()->fetch_assoc();
+$accountCheck->close();
+
+if (!$account || (int) $account['is_active'] !== 1) {
+    app_logout_session();
+    header('Location: login.php?disabled=1', true, 303);
+    exit;
+}
+
+$_SESSION['name'] = (string) $account['name'];
+$_SESSION['username'] = (string) $account['username'];
+$_SESSION['email'] = (string) ($account['email'] ?? '');
+$_SESSION['role'] = (string) $account['role'];

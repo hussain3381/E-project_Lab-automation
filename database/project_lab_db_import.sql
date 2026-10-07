@@ -20,12 +20,14 @@ CREATE TABLE IF NOT EXISTS `users` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(120) NOT NULL,
     `username` VARCHAR(80) NOT NULL,
+    `email` VARCHAR(190) NULL,
     `password` VARCHAR(255) NOT NULL,
     `role` VARCHAR(50) NOT NULL DEFAULT 'Tester',
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_users_username` (`username`)
+    UNIQUE KEY `uq_users_username` (`username`),
+    UNIQUE KEY `uq_users_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `roles` (
@@ -155,6 +157,7 @@ CREATE TABLE IF NOT EXISTS `product_type_test_types` (
 
 CREATE TABLE IF NOT EXISTS `testers` (
     `id` INT NOT NULL AUTO_INCREMENT,
+    `user_id` INT NULL,
     `name` VARCHAR(120) NOT NULL,
     `department` VARCHAR(150) NULL,
     `designation` VARCHAR(100) NULL,
@@ -163,8 +166,11 @@ CREATE TABLE IF NOT EXISTS `testers` (
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_testers_user_id` (`user_id`),
     KEY `ix_testers_name` (`name`),
-    KEY `ix_testers_department` (`department`)
+    KEY `ix_testers_department` (`department`),
+    CONSTRAINT `fk_testers_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+        ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `tests` (
@@ -274,11 +280,34 @@ CREATE TABLE IF NOT EXISTS `product_workflow_events` (
         ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `contact_messages` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(120) NOT NULL,
+    `email` VARCHAR(190) NOT NULL,
+    `subject` VARCHAR(160) NOT NULL,
+    `message` TEXT NOT NULL,
+    `status` VARCHAR(24) NOT NULL DEFAULT 'New',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `ix_contact_messages_status_date` (`status`, `created_at`),
+    KEY `ix_contact_messages_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Upgrade columns safely when this file is imported over an older XAMPP/MariaDB database.
 -- Each prepared ALTER runs only if the selected database does not already have that column.
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'email'), 'SELECT 1', 'ALTER TABLE `users` ADD COLUMN `email` VARCHAR(190) NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
 SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
 PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'uq_users_email'), 'SELECT 1', 'ALTER TABLE `users` ADD UNIQUE KEY `uq_users_email` (`email`)');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'testers' AND COLUMN_NAME = 'user_id'), 'SELECT 1', 'ALTER TABLE `testers` ADD COLUMN `user_id` INT NULL');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
 SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'testers' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `testers` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'testers' AND INDEX_NAME = 'uq_testers_user_id'), 'SELECT 1', 'ALTER TABLE `testers` ADD UNIQUE KEY `uq_testers_user_id` (`user_id`)');
+PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
+SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_testers_user'), 'SELECT 1', 'ALTER TABLE `testers` ADD CONSTRAINT `fk_testers_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON UPDATE CASCADE ON DELETE SET NULL');
 PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
 SET @compat_ddl = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'departments' AND COLUMN_NAME = 'is_active'), 'SELECT 1', 'ALTER TABLE `departments` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1');
 PREPARE compat_stmt FROM @compat_ddl; EXECUTE compat_stmt; DEALLOCATE PREPARE compat_stmt;
@@ -318,7 +347,8 @@ INSERT IGNORE INTO `schema_migrations` (`migration`) VALUES
     ('002_legacy_schema_compat.sql'),
     ('003_product_code_registry_and_test_rolls.sql'),
     ('004_workflow_cpri_and_department_routing.sql'),
-    ('005_roles_registry.sql');
+    ('005_roles_registry.sql'),
+    ('006_public_accounts_and_contact.sql');
 
 INSERT IGNORE INTO `departments` (`id`, `department_code`, `department_name`) VALUES
     (1, 'ELEC', 'Electrical Testing'),
@@ -388,6 +418,11 @@ INSERT IGNORE INTO `users` (`name`, `username`, `password`, `role`, `is_active`)
     ('Lab Manager', 'manager', '$2y$12$V53AREmVvWnds7Bzx0fcaeFfxOQFD44MSLY.jYqDMXMXx09zMymwy', 'Lab Manager', 1),
     ('Test Engineer', 'tester', '$2y$12$V53AREmVvWnds7Bzx0fcaeFfxOQFD44MSLY.jYqDMXMXx09zMymwy', 'Tester', 1),
     ('Quality Control', 'quality', '$2y$12$V53AREmVvWnds7Bzx0fcaeFfxOQFD44MSLY.jYqDMXMXx09zMymwy', 'Quality Control', 1);
+
+UPDATE `testers` AS t
+INNER JOIN `users` AS u ON u.`username` = 'tester'
+SET t.`user_id` = u.`id`
+WHERE t.`id` = 1 AND t.`user_id` IS NULL;
 
 -- Explicit parentheses around the product column list and VALUES block avoid import/parser ambiguity.
 INSERT IGNORE INTO `products` (

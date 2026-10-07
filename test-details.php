@@ -1,6 +1,8 @@
 <?php
 
 include "db.php";
+require_page_access(__FILE__);
+require_once __DIR__ . '/models/Tester.php';
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     die("Invalid test request.");
@@ -36,7 +38,29 @@ $result = mysqli_stmt_get_result($stmt);
 $test = mysqli_fetch_assoc($result);
 
 if (!$test) {
-    die("Test record not found.");
+    http_response_code(404);
+    exit('Test record not found.');
+}
+
+// A Tester may only open a record linked to their own tester profile.
+$isTester = (string) ($_SESSION['role'] ?? '') === 'Tester';
+if ($isTester) {
+    $testerProfile = Tester::findByUserId($conn, (int) ($_SESSION['user_id'] ?? 0));
+    if ($testerProfile === null) {
+        RoleMiddleware::handle([]);
+    }
+    $ownership = $conn->prepare(
+        'SELECT 1 FROM tests AS t WHERE t.id = ? AND (t.tester_id = ? OR EXISTS (' .
+        'SELECT 1 FROM test_participants AS p WHERE p.test_record_id = t.id AND p.tester_id = ?)) LIMIT 1'
+    );
+    $testerProfileId = (int) $testerProfile['id'];
+    $ownership->bind_param('iii', $id, $testerProfileId, $testerProfileId);
+    $ownership->execute();
+    $isAssigned = $ownership->get_result()->num_rows > 0;
+    $ownership->close();
+    if (!$isAssigned) {
+        RoleMiddleware::handle([]);
+    }
 }
 
 $participantStmt = $conn->prepare(
@@ -89,9 +113,6 @@ function statusClass($status) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>Test Details | Lab Automation</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-
 <link rel="stylesheet" href="assets/css/pages/test-details.css">
 
 </head>
@@ -100,41 +121,7 @@ function statusClass($status) {
 
 <!-- SIDEBAR -->
 
-<div class="sidebar">
-
-    <div class="logo">
-        <h2>LAB AUTOMATION</h2>
-        <p>Electrical Testing System</p>
-    </div>
-
-    <div class="menu">
-
-        <a href="dashboard.php">Dashboard</a>
-
-        <a href="products.php">Products</a>
-
-        <a href="testing.php" class="active">Testing</a>
-
-        <a href="test-types.php">Test Types</a>
-
-        <a href="search.php">Advanced Search</a>
-
-        <a href="reports.php">Reports</a>
-
-        <a href="testers.php">Testers</a>
-
-        <a href="settings.php">Settings</a>
-
-        <a href="logout.php">Logout</a>
-
-    </div>
-
-    <div class="user-box">
-        <strong>Lab Administrator</strong>
-        <span>Administrator</span>
-    </div>
-
-</div>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 <!-- MAIN -->
@@ -148,9 +135,12 @@ function statusClass($status) {
             <p>Complete laboratory testing record</p>
         </div>
 
-        <a href="testing.php" class="back-btn">
-            ← Back to Testing
-        </a>
+        <div class="action-row">
+            <?php if ($isTester && strtoupper((string) $test['result']) === 'PENDING' && in_array(strtolower((string) $test['status']), ['pending', 'in progress', 'testing in progress'], true)): ?>
+                <a href="complete-test.php?id=<?php echo (int) $test['id']; ?>" class="back-btn">Record assigned result</a>
+            <?php endif; ?>
+            <a href="testing.php" class="back-btn">← Back to Testing</a>
+        </div>
 
     </div>
 

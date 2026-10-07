@@ -11,7 +11,7 @@
     margin: 0;
     background: var(--theme-bg);
     color: var(--theme-text);
-    font-family: Inter, Arial, sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 }
 
 .roles-sidebar {

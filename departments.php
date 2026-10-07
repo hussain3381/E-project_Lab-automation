@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
-require_roles(['Administrator', 'Lab Manager']);
+require_page_access(__FILE__);
 
 $message = '';
 $error = '';

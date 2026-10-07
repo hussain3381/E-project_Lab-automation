@@ -1,3 +1,4 @@
-// Vite entry point: bundle the shared CSS variables and theme toggle for all PHP pages.
-import '../../assets/css/theme-tokens.css';
+// Vite entry point: locally bundled Tailwind, Font Awesome, Inter, theme and shell behavior.
+import '../css/app.css';
 import '../../assets/js/theme.js';
+import './app-ui.js';

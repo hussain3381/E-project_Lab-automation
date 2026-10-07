@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
-require_roles(['Administrator', 'Lab Manager']);
+require_page_access(__FILE__);
 require_once __DIR__ . "/models/ProductIdGenerator.php";
 require_once __DIR__ . "/models/ProductCode.php";
 require_once __DIR__ . "/models/ProductCatalog.php";
@@ -113,10 +113,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Add Product | Lab Automation</title>
-
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="assets/css/pages/add-product.css">
+<link rel="stylesheet" href="assets/css/pages/add-product.css">
 
 </head>
 
@@ -124,44 +121,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST") {
 
     <!-- Sidebar -->
 
-    <aside class="sidebar">
-
-        <div class="logo">
-            <h1>LAB <span>AUTOMATION</span></h1>
-            <p>Electrical Testing System</p>
-        </div>
-
-        <div class="nav-title">Main Menu</div>
-
-        <nav class="nav">
-
-            <a href="dashboard.php">Dashboard</a>
-
-            <a href="products.php" class="active">Products</a>
-
-            <a href="testing.php">Testing</a>
-
-            <a href="test-types.php">Test Types</a>
-
-            <a href="search.php">Advanced Search</a>
-
-            <a href="reports.php">Reports</a>
-
-        </nav>
-
-        <div class="nav-title">Management</div>
-
-        <nav class="nav">
-
-            <a href="testers.php">Testers</a>
-
-            <a href="settings.php">Settings</a>
-
-            <a href="login.php">Logout</a>
-
-        </nav>
-
-    </aside>
+    <?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
     <!-- Main Content -->

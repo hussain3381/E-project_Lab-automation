@@ -1,20 +1,12 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <script>/* Restore the saved palette before painting the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Product Workflow | Lab Automation</title>
-    <link rel="stylesheet" href="assets/compiled/app.css">
-    <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="assets/css/pages/product-workflow.css">
-</head>
-<body class="workflow-page">
-    <main class="workflow-shell">
-        <header class="workflow-header">
-            <div><p class="workflow-eyebrow">LAB OPERATIONS</p><h1>Product Workflow</h1><p>Review required-test progress, release re-manufactured products for retest, and log an external CPRI handoff only after the full required plan passes.</p></div>
-            <a href="products.php">Back to Products</a>
-        </header>
+<?php
+$pageTitle = 'Product workflow';
+$pageEyebrow = 'LAB OPERATIONS';
+$pageDescription = 'Review test progress, handle re-manufacture release and record manual CPRI handoffs.';
+$pageStylesheet = 'assets/css/pages/product-workflow.css';
+$pageActionHtml = '<a class="button button-quiet" href="products.php">Back to products</a>' ;
+require __DIR__ . '/../layouts/app_start.php';
+?>
+<div class="workflow-shell">
         <?php if ($workflowState['message'] !== ''): ?><div class="workflow-alert workflow-alert--success" role="status"><?php echo htmlspecialchars($workflowState['message'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
         <?php if ($workflowState['error'] !== ''): ?><div class="workflow-alert workflow-alert--error" role="alert"><?php echo htmlspecialchars($workflowState['error'], ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
         <section class="workflow-card">
@@ -26,7 +18,7 @@
                         <td><strong><?php echo htmlspecialchars($product['product_id'], ENT_QUOTES, 'UTF-8'); ?></strong><small><?php echo htmlspecialchars($product['product_name'] . ' · ' . $product['product_type'], ENT_QUOTES, 'UTF-8'); ?></small></td>
                         <td><span class="workflow-status"><?php echo htmlspecialchars($product['status'], ENT_QUOTES, 'UTF-8'); ?></span></td>
                         <td><?php echo (int) $product['current_cycle']; ?></td>
-                        <td><?php echo (int) $product['passed_tests']; ?> / <?php echo (int) $product['required_tests']; ?> passed<?php if ((int) $product['required_tests'] === 0): ?><small><a href="product-test-plan.php?product_type_id=<?php echo (int) $product['product_type_id']; ?>">Configure test plan</a></small><?php endif; ?></td>
+                        <td><?php echo (int) $product['passed_tests']; ?> / <?php echo (int) $product['required_tests']; ?> passed<?php if ((int) $product['required_tests'] === 0): ?><small><?php if (app_can_access_route('product-test-plan.php')): ?><a href="product-test-plan.php?product_type_id=<?php echo (int) $product['product_type_id']; ?>">Configure test plan</a><?php else: ?>Ask an Administrator to configure the family plan.<?php endif; ?></small><?php endif; ?></td>
                         <td><?php echo htmlspecialchars($product['cpri_status'], ENT_QUOTES, 'UTF-8'); ?>
                             <?php if ($product['last_handoff_at']): ?><small><?php echo htmlspecialchars((string) $product['last_handoff_at'], ENT_QUOTES, 'UTF-8'); ?><?php if ((string) $product['last_handoff_reference'] !== ''): ?> · Ref <?php echo htmlspecialchars((string) $product['last_handoff_reference'], ENT_QUOTES, 'UTF-8'); ?><?php endif; ?></small><?php endif; ?>
                         </td>
@@ -61,6 +53,5 @@
             </table></div>
         </section>
         <aside class="workflow-note"><strong>Important:</strong> “Record CPRI handoff” saves the date, user, optional reference, and audit history locally. It does not send data to CPRI.</aside>
-    </main>
-</body>
-</html>
+    </div>
+<?php require __DIR__ . '/../layouts/app_end.php'; ?>

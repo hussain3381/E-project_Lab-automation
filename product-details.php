@@ -1,5 +1,7 @@
 <?php
 include "db.php";
+require_page_access(__FILE__);
+require_once __DIR__ . '/models/Tester.php';
 
 /* Product ID from URL */
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
@@ -19,13 +21,34 @@ $product = mysqli_fetch_assoc($result);
 mysqli_stmt_close($stmt);
 
 if (!$product) {
-    die("Product not found.");
+    http_response_code(404);
+    exit('Product not found.');
 }
 
-/* Get Testing History */
-$history_stmt = mysqli_prepare(
-    $conn,
-    "SELECT
+$isTester = (string) ($_SESSION['role'] ?? '') === 'Tester';
+$testerProfileId = 0;
+if ($isTester) {
+    $testerProfile = Tester::findByUserId($conn, (int) ($_SESSION['user_id'] ?? 0));
+    if ($testerProfile === null) {
+        RoleMiddleware::handle([]);
+    }
+    $testerProfileId = (int) $testerProfile['id'];
+    $productAccess = $conn->prepare(
+        'SELECT 1 FROM tests AS assigned_test WHERE assigned_test.product_id = ? AND (' .
+        'assigned_test.tester_id = ? OR EXISTS (SELECT 1 FROM test_participants AS assigned_participant ' .
+        'WHERE assigned_participant.test_record_id = assigned_test.id AND assigned_participant.tester_id = ?)) LIMIT 1'
+    );
+    $productAccess->bind_param('sii', $product['product_id'], $testerProfileId, $testerProfileId);
+    $productAccess->execute();
+    $isAssignedProduct = $productAccess->get_result()->num_rows > 0;
+    $productAccess->close();
+    if (!$isAssignedProduct) {
+        RoleMiddleware::handle([]);
+    }
+}
+
+/* Testers can review only the records attached to their own tester profile. */
+$historySql = "SELECT
         tests.*,
         test_types.test_name,
         test_types.test_code,
@@ -40,18 +63,20 @@ $history_stmt = mysqli_prepare(
      LEFT JOIN test_types ON tests.test_type_id = test_types.id
      LEFT JOIN departments AS routed_department ON tests.department_id = routed_department.id
      LEFT JOIN testers ON tests.tester_id = testers.id
-     WHERE tests.product_id = ?
-     ORDER BY tests.id DESC"
-);
-
-mysqli_stmt_bind_param(
-    $history_stmt,
-    "s",
-    $product['product_id']
-);
-
-mysqli_stmt_execute($history_stmt);
-$history = mysqli_stmt_get_result($history_stmt);
+     WHERE tests.product_id = ?";
+if ($isTester) {
+    $historySql .= ' AND (tests.tester_id = ? OR EXISTS (SELECT 1 FROM test_participants AS own_participant '
+        . 'WHERE own_participant.test_record_id = tests.id AND own_participant.tester_id = ?))';
+}
+$historySql .= ' ORDER BY tests.id DESC';
+$history_stmt = $conn->prepare($historySql);
+if ($isTester) {
+    $history_stmt->bind_param('sii', $product['product_id'], $testerProfileId, $testerProfileId);
+} else {
+    $history_stmt->bind_param('s', $product['product_id']);
+}
+$history_stmt->execute();
+$history = $history_stmt->get_result();
 
 $event_stmt = $conn->prepare(
     'SELECT event_type, old_status, new_status, notes, changed_by, changed_at ' .
@@ -69,17 +94,13 @@ $workflowEvents = $event_stmt->get_result();
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
     <meta charset="UTF-8">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Product Details | Lab Automation</title>
-
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="assets/css/pages/product-details.css">
+<link rel="stylesheet" href="assets/css/pages/product-details.css">
 
 </head>
 
@@ -88,71 +109,7 @@ $workflowEvents = $event_stmt->get_result();
 
 <!-- SIDEBAR -->
 
-<aside class="sidebar">
-
-    <div class="logo">
-
-        <h1>LAB <span>AUTOMATION</span></h1>
-
-        <p>Electrical Testing System</p>
-
-    </div>
-
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-    <nav class="nav">
-
-        <a href="dashboard.php">
-            Dashboard
-        </a>
-
-        <a href="products.php" class="active">
-            Products
-        </a>
-
-        <a href="testing.php">
-            Testing
-        </a>
-
-        <a href="test-types.php">
-            Test Types
-        </a>
-
-        <a href="search.php">
-            Advanced Search
-        </a>
-
-        <a href="reports.php">
-            Reports
-        </a>
-
-    </nav>
-
-
-    <div class="nav-title">
-        Management
-    </div>
-
-    <nav class="nav">
-
-        <a href="testers.php">
-            Testers
-        </a>
-
-        <a href="settings.php">
-            Settings
-        </a>
-
-        <a href="login.php">
-            Logout
-        </a>
-
-    </nav>
-
-</aside>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 <!-- MAIN -->
@@ -187,7 +144,7 @@ $workflowEvents = $event_stmt->get_result();
         <div class="product-title">
 
             <div class="product-icon">
-                <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+                ⚡
             </div>
 
             <div>
@@ -545,7 +502,7 @@ $workflowEvents = $event_stmt->get_result();
                 <div class="empty">
 
                     <div class="empty-icon">
-                        <i class="fa-solid fa-flask" aria-hidden="true"></i>
+                        🧪
                     </div>
 
                     <p>

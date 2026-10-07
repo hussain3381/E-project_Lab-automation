@@ -4,7 +4,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
-require_roles(['Administrator']);
+require_page_access(__FILE__);
 require_once __DIR__ . '/controllers/ProductCatalogController.php';
 
 $catalogState = product_catalog_handle_request($conn);

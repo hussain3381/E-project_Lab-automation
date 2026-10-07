@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
-require_roles(['Administrator', 'Lab Manager']);
+require_page_access(__FILE__);
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     http_response_code(400);
@@ -61,9 +61,6 @@ if (!$product) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>Edit Product | Lab Automation</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-
 <link rel="stylesheet" href="assets/css/pages/edit-product.css">
 
 </head>
@@ -73,67 +70,7 @@ if (!$product) {
 
 <!-- SIDEBAR -->
 
-<div class="sidebar">
-
-    <div class="logo">
-
-        <h2>LAB AUTOMATION</h2>
-
-        <p>Electrical Testing System</p>
-
-    </div>
-
-
-    <div class="menu">
-
-        <a href="dashboard.php">
-            Dashboard
-        </a>
-
-        <a href="products.php" class="active">
-            Products
-        </a>
-
-        <a href="testing.php">
-            Testing
-        </a>
-
-        <a href="test-types.php">
-            Test Types
-        </a>
-
-        <a href="search.php">
-            Advanced Search
-        </a>
-
-        <a href="reports.php">
-            Reports
-        </a>
-
-        <a href="testers.php">
-            Testers
-        </a>
-
-        <a href="settings.php">
-            Settings
-        </a>
-
-        <a href="logout.php">
-            Logout
-        </a>
-
-    </div>
-
-
-    <div class="user-box">
-
-        <strong>Lab Administrator</strong>
-
-        <span>Administrator</span>
-
-    </div>
-
-</div>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 <!-- MAIN -->
