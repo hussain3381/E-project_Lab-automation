@@ -146,6 +146,7 @@ $users = $conn->query(
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
 <meta charset="UTF-8">
 
@@ -185,7 +186,7 @@ $users = $conn->query(
     <div class="brand">
 
         <div class="brand-icon">
-            ⚡
+            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
         </div>
 
         <div>
@@ -236,7 +237,7 @@ $users = $conn->query(
             href="testing.php"
             class="nav-link"
         >
-            <span class="nav-icon">⚗</span>
+            <span class="nav-icon"><i class="fa-solid fa-flask" aria-hidden="true"></i></span>
             <span>Testing</span>
         </a>
 
@@ -281,7 +282,7 @@ $users = $conn->query(
             href="testers.php"
             class="nav-link"
         >
-            <span class="nav-icon">♙</span>
+            <span class="nav-icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
             <span>Testers</span>
         </a>
 
@@ -290,7 +291,7 @@ $users = $conn->query(
             href="settings.php"
             class="nav-link"
         >
-            <span class="nav-icon">⚙</span>
+            <span class="nav-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
             <span>Settings</span>
         </a>
 
@@ -300,7 +301,7 @@ $users = $conn->query(
             class="nav-link active"
             aria-current="page"
         >
-            <span class="nav-icon">♟</span>
+            <span class="nav-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
             <span>Users</span>
         </a>
 
@@ -386,7 +387,7 @@ $users = $conn->query(
 
         <div class="error">
 
-            ⚠
+            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
             <?php echo htmlspecialchars($error); ?>
 
         </div>

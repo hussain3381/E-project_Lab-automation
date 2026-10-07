@@ -99,6 +99,7 @@ $failed_tests = $failed_row['total'];
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
 <meta charset="UTF-8">
 
@@ -142,7 +143,7 @@ $failed_tests = $failed_row['total'];
     <div class="brand">
 
         <div class="brand-icon">
-            ⚡
+            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
         </div>
 
         <div>
@@ -208,7 +209,7 @@ $failed_tests = $failed_row['total'];
         >
 
             <span class="nav-icon">
-                🧪
+            <i class="fa-solid fa-flask" aria-hidden="true"></i>
             </span>
 
             <span>
@@ -288,7 +289,7 @@ $failed_tests = $failed_row['total'];
         >
 
             <span class="nav-icon">
-                ⚙
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
             </span>
 
             <span>
@@ -332,7 +333,7 @@ $failed_tests = $failed_row['total'];
         >
 
             <span class="nav-icon">
-                ↪
+                <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
             </span>
 
             <span>
@@ -769,7 +770,7 @@ $failed_tests = $failed_row['total'];
                         >
 
                             <div class="empty-icon">
-                                🧪
+                                <i class="fa-solid fa-flask" aria-hidden="true"></i>
                             </div>
 
                             No testing records found.
