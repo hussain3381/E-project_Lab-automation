@@ -1,897 +1,147 @@
 <?php
+// Role-aware product catalogue with read access for lab staff and edit links only for lab leads.
+declare(strict_types=1);
 
-include "db.php";
+require_once __DIR__ . '/config/security.php';
+include __DIR__ . '/db.php';
+require_page_access(__FILE__);
 
-/* =========================
-   SEARCH
-========================= */
+require_once __DIR__ . '/models/Tester.php';
+$search = trim((string) ($_GET['search'] ?? ''));
+$role = (string) ($_SESSION['role'] ?? '');
+$isTester = $role === 'Tester';
+$testerProfile = $isTester ? Tester::findByUserId($conn, (int) ($_SESSION['user_id'] ?? 0)) : null;
+$testerId = $testerProfile !== null ? (int) $testerProfile['id'] : 0;
+$canManageProducts = app_can_access_route('add-product.php');
+$canManageWorkflow = app_can_access_route('product-workflow.php');
 
-$search = "";
-
-if (isset($_GET['search'])) {
-    $search = trim($_GET['search']);
-}
-
-
-/* =========================
-   PRODUCT QUERY
-========================= */
-
-if ($search != "") {
-
-    $stmt = mysqli_prepare($conn, "
-        SELECT *
-        FROM products
-        WHERE product_id LIKE ?
-        OR product_code LIKE ?
-        OR product_name LIKE ?
-        OR product_type LIKE ?
-        OR revision LIKE ?
-        OR status LIKE ?
-        ORDER BY id DESC
-    ");
-
-    $like = "%" . $search . "%";
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        "ssssss",
-        $like,
-        $like,
-        $like,
-        $like,
-        $like,
-        $like
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $result = mysqli_stmt_get_result($stmt);
-
-} else {
-
-    $result = mysqli_query(
-        $conn,
-        "SELECT * FROM products ORDER BY id DESC"
-    );
-}
-
-
-/* =========================
-   TOTAL PRODUCTS
-========================= */
-
-$total_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total FROM products"
-);
-
-$total_row = mysqli_fetch_assoc($total_query);
-$total_products = $total_row['total'];
-
-
-/* =========================
-   PENDING PRODUCTS
-========================= */
-
-$pending_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM products
-     WHERE status IN ('Pending Testing', 'Testing In Progress', 'Ready for Retest')"
-);
-
-$pending_row = mysqli_fetch_assoc($pending_query);
-$pending_products = $pending_row['total'];
-
-
-/* =========================
-   PASSED PRODUCTS
-========================= */
-
-$passed_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM products
-     WHERE status IN ('Passed', 'CPRI Ready', 'Handed to CPRI')"
-);
-
-$passed_row = mysqli_fetch_assoc($passed_query);
-$passed_products = $passed_row['total'];
-
-
-/* =========================
-   FAILED PRODUCTS
-========================= */
-
-$failed_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-    FROM products
-    WHERE status = 'Failed - Re-manufacturing'"
-);
-
-$failed_row = mysqli_fetch_assoc($failed_query);
-$failed_products = $failed_row['total'];
-
-
-/* =========================
-   USER INFORMATION
-========================= */
-
-require_once __DIR__ . "/config/security.php";
-app_start_session();
-
-$user_name = $_SESSION['name'] ?? 'Lab Administrator';
-$user_role = $_SESSION['role'] ?? 'Administrator';
-
-
-/* User initials */
-
-$name_parts = explode(" ", trim($user_name));
-
-$user_initials = "";
-
-foreach ($name_parts as $part) {
-
-    if ($part != "") {
-
-        $user_initials .= strtoupper(
-            substr($part, 0, 1)
-        );
-    }
-
-    if (strlen($user_initials) >= 2) {
-        break;
+$assignmentCondition = '';
+$assignmentTypes = '';
+$assignmentParams = [];
+if ($isTester) {
+    if ($testerId > 0) {
+        $assignmentCondition = 'EXISTS (SELECT 1 FROM tests AS assigned_test WHERE assigned_test.product_id = p.product_id '
+            . 'AND (assigned_test.tester_id = ? OR EXISTS (SELECT 1 FROM test_participants AS assigned_participant '
+            . 'WHERE assigned_participant.test_record_id = assigned_test.id AND assigned_participant.tester_id = ?)))';
+        $assignmentTypes = 'ii';
+        $assignmentParams = [$testerId, $testerId];
+    } else {
+        $assignmentCondition = '1 = 0';
     }
 }
 
-if ($user_initials == "") {
-    $user_initials = "LA";
+$statsSql = "SELECT COUNT(*) AS total,
+    SUM(p.status IN ('Pending Testing', 'Testing In Progress', 'Ready for Retest')) AS active_count,
+    SUM(p.status IN ('Passed', 'CPRI Ready', 'Handed to CPRI')) AS passed_count,
+    SUM(p.status = 'Failed - Re-manufacturing') AS rework_count
+    FROM products AS p";
+if ($assignmentCondition !== '') {
+    $statsSql .= ' WHERE ' . $assignmentCondition;
 }
+$statsStatement = $conn->prepare($statsSql);
+if ($assignmentTypes !== '') {
+    $statsBindArguments = [$assignmentTypes];
+    foreach (array_keys($assignmentParams) as $index) {
+        $statsBindArguments[] = &$assignmentParams[$index];
+    }
+    call_user_func_array([$statsStatement, 'bind_param'], $statsBindArguments);
+}
+$statsStatement->execute();
+$productStats = $statsStatement->get_result()->fetch_assoc() ?: [];
+$statsStatement->close();
 
+$conditions = [];
+$types = '';
+$params = [];
+if ($assignmentCondition !== '') {
+    $conditions[] = $assignmentCondition;
+    $types .= $assignmentTypes;
+    array_push($params, ...$assignmentParams);
+}
+if ($search !== '') {
+    $conditions[] = '(p.product_id LIKE ? OR p.product_code LIKE ? OR p.product_name LIKE ? OR p.product_type LIKE ? OR p.revision LIKE ? OR p.status LIKE ?)';
+    $like = '%' . $search . '%';
+    $types .= 'ssssss';
+    array_push($params, $like, $like, $like, $like, $like, $like);
+}
+$sql = 'SELECT p.id, p.product_id, p.product_code, p.product_name, p.product_type, p.revision, p.manufacturing_date, p.status '
+    . 'FROM products AS p';
+if ($conditions !== []) {
+    $sql .= ' WHERE ' . implode(' AND ', $conditions);
+}
+$sql .= ' ORDER BY p.id DESC LIMIT 250';
+$statement = $conn->prepare($sql);
+if ($types !== '') {
+    $bindArguments = [$types];
+    foreach (array_keys($params) as $index) {
+        $bindArguments[] = &$params[$index];
+    }
+    call_user_func_array([$statement, 'bind_param'], $bindArguments);
+}
+$statement->execute();
+$productRows = $statement->get_result()->fetch_all(MYSQLI_ASSOC);
+$statement->close();
+
+$pageTitle = 'Products';
+$pageEyebrow = 'PRODUCT REGISTER';
+$pageDescription = $isTester
+    ? 'Browse only products linked to test work assigned to your tester profile.'
+    : 'Find product records, review identity and workflow status, and open the traceable test history.';
+$actions = [];
+if ($canManageWorkflow) {
+    $actions[] = '<a class="button button-secondary" href="product-workflow.php"><i class="fa-solid fa-arrows-spin" aria-hidden="true"></i> Product workflow</a>';
+}
+if ($canManageProducts) {
+    $actions[] = '<a class="button button-primary" href="add-product.php"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add product</a>';
+}
+$pageActionHtml = implode('', $actions);
+require __DIR__ . '/views/layouts/app_start.php';
 ?>
-
-<!DOCTYPE html>
-
-<html lang="en">
-
-<head>
-    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
-    <link rel="stylesheet" href="assets/compiled/app.css">
-    <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>Products | Lab Automation</title>
-
-
-<!-- =========================
-     GOOGLE FONTS
-========================= -->
-
-<link
-    rel="preconnect"
-    href="https://fonts.googleapis.com"
->
-
-<link
-    rel="preconnect"
-    href="https://fonts.gstatic.com"
-    crossorigin
->
-
-<link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-    rel="stylesheet"
->
-
-
-<link rel="stylesheet" href="assets/css/pages/products.css">
-
-</head>
-
-
-<body>
-
-
-<!-- =========================
-     SIDEBAR
-========================= -->
-
-<aside class="sidebar">
-
-
-    <div class="brand">
-
-        <div class="brand-icon">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-        </div>
-
-        <div class="brand-text">
-
-            <strong>
-                LAB AUTOMATION
-            </strong>
-
-            <span>
-                Electrical Testing
-            </span>
-
-        </div>
-
-    </div>
-
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-
-    <nav>
-
-
-        <a
-            href="dashboard.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌂
-            </span>
-
-            Dashboard
-
-        </a>
-
-
-        <a
-            href="products.php"
-            class="nav-link active"
-        >
-
-            <span class="nav-icon">
-                ▣
-            </span>
-
-            Products
-
-        </a>
-
-
-        <a
-            href="testing.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◈
-            </span>
-
-            Testing
-
-        </a>
-
-
-        <a
-            href="test-types.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◫
-            </span>
-
-            Test Types
-
-        </a>
-
-
-        <a
-            href="search.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌕
-            </span>
-
-            Advanced Search
-
-        </a>
-
-
-        <a
-            href="reports.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ▤
-            </span>
-
-            Reports
-
-        </a>
-
-
-        <a
-            href="testers.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◎
-            </span>
-
-            Testers
-
-        </a>
-
-
-        <a
-            href="settings.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                <i class="fa-solid fa-gear" aria-hidden="true"></i>
-            </span>
-
-            Settings
-
-        </a>
-
-
-        <a
-            href="logout.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⇥
-            </span>
-
-            Logout
-
-        </a>
-
-
-    </nav>
-
-
-    <!-- USER -->
-
-    <div class="sidebar-bottom">
-
-        <div class="user-box">
-
-            <div class="user-avatar">
-
-                <?php
-                echo htmlspecialchars($user_initials);
-                ?>
-
-            </div>
-
-
-            <div class="user-info">
-
-                <strong>
-                    <?php
-                    echo htmlspecialchars($user_name);
-                    ?>
-                </strong>
-
-                <span>
-                    <?php
-                    echo htmlspecialchars($user_role);
-                    ?>
-                </span>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-</aside>
-
-
-
-<!-- =========================
-     MAIN CONTENT
-========================= -->
-
-<main class="main">
-
-
-    <!-- =========================
-         HEADER
-    ========================= -->
-
-    <div class="topbar">
-
-        <div class="welcome">
-
-            <small>
-                PRODUCT MANAGEMENT
-            </small>
-
-            <h1>
-                Products
-            </h1>
-
-            <p>
-                View and manage all registered electrical products.
-            </p>
-
-        </div>
-
-
-        <?php if (in_array((string) ($_SESSION['role'] ?? ''), ['Administrator', 'Lab Manager', 'Quality Control'], true)): ?>
-            <a href="product-workflow.php" class="add-btn">Product Workflow</a>
-        <?php endif; ?>
-
-        <?php if (in_array((string) ($_SESSION['role'] ?? ''), ['Administrator', 'Lab Manager'], true)): ?>
-            <a href="add-product.php" class="add-btn">+ Add New Product</a>
-        <?php endif; ?>
-
-    </div>
-
-
-
-    <!-- =========================
-         STATISTICS
-    ========================= -->
-
-    <div class="stats">
-
-
-        <!-- TOTAL -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                Total Products
-            </div>
-
-            <div class="stat-number">
-
-                <?php
-                echo $total_products;
-                ?>
-
-            </div>
-
-            <div class="stat-small">
-                Registered Products
-            </div>
-
-        </div>
-
-
-        <!-- PENDING -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                Pending Testing
-            </div>
-
-            <div class="stat-number">
-
-                <?php
-                echo $pending_products;
-                ?>
-
-            </div>
-
-            <div class="stat-small">
-                Awaiting Laboratory Test
-            </div>
-
-        </div>
-
-
-        <!-- PASSED -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                CPRI Ready / Sent
-            </div>
-
-            <div class="stat-number">
-
-                <?php
-                echo $passed_products;
-                ?>
-
-            </div>
-
-            <div class="stat-small">
-                All required tests passed / handed off
-            </div>
-
-        </div>
-
-
-        <!-- FAILED -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                Re-manufacture
-            </div>
-
-            <div class="stat-number">
-
-                <?php
-                echo $failed_products;
-                ?>
-
-            </div>
-
-            <div class="stat-small">
-                Awaiting rework and release for retest
-            </div>
-
-        </div>
-
-
-    </div>
-
-
-
-    <!-- =========================
-         SEARCH
-    ========================= -->
-
-    <div class="search-box">
-
-
-        <form
-            method="GET"
-            action="products.php"
-            class="search-form"
-        >
-
-
-            <input
-                type="text"
-                name="search"
-                placeholder="Search Product ID, Code, Name, Type, Revision or Status..."
-                value="<?php
-                    echo htmlspecialchars($search);
-                ?>"
-            >
-
-
-            <button
-                type="submit"
-                class="search-btn"
-            >
-                Search
-            </button>
-
-
-            <?php if ($search != ""): ?>
-
-                <a
-                    href="products.php"
-                    class="clear-btn"
-                >
-                    Clear
-                </a>
-
-            <?php endif; ?>
-
-
-        </form>
-
-    </div>
-
-
-
-    <!-- =========================
-         PRODUCT TABLE
-    ========================= -->
-
-    <div class="table-box">
-
-
-        <div class="table-header">
-
-            <div>
-
-                <h2>
-                    Product List
-                </h2>
-
-                <p>
-                    Complete list of products registered in the laboratory system.
-                </p>
-
-            </div>
-
-        </div>
-
-
-
-        <table>
-
-
-            <thead>
-
-                <tr>
-
-                    <th>
-                        Product ID
-                    </th>
-
-                    <th>
-                        Product Name
-                    </th>
-
-                    <th>
-                        Product Code
-                    </th>
-
-                    <th>
-                        Product Type
-                    </th>
-
-                    <th>
-                        Revision
-                    </th>
-
-                    <th>
-                        Manufacturing No.
-                    </th>
-
-                    <th>
-                        Manufacturing Date
-                    </th>
-
-                    <th>
-                        Status
-                    </th>
-
-                    <th>
-                        Action
-                    </th>
-
-                </tr>
-
-            </thead>
-
-
-
-            <tbody>
-
-
-            <?php if ($result && mysqli_num_rows($result) > 0): ?>
-
-
-                <?php while ($row = mysqli_fetch_assoc($result)): ?>
-
-
+<section class="stats-grid">
+    <?php
+    $metrics = [
+        ['label' => 'Total products', 'value' => (int) ($productStats['total'] ?? 0), 'note' => 'Registered records', 'icon' => 'fa-cubes-stacked', 'tone' => 'var(--theme-accent)'],
+        ['label' => 'Active testing', 'value' => (int) ($productStats['active_count'] ?? 0), 'note' => 'Pending, testing or retest', 'icon' => 'fa-hourglass-half', 'tone' => 'var(--theme-warning)'],
+        ['label' => 'Passed / CPRI', 'value' => (int) ($productStats['passed_count'] ?? 0), 'note' => 'Passed or handoff state', 'icon' => 'fa-circle-check', 'tone' => 'var(--theme-success)'],
+        ['label' => 'In re-manufacture', 'value' => (int) ($productStats['rework_count'] ?? 0), 'note' => 'Requires controlled release', 'icon' => 'fa-arrows-rotate', 'tone' => 'var(--theme-danger)'],
+    ];
+    foreach ($metrics as $metric) {
+        $statLabel = $metric['label'];
+        $statValue = number_format((int) $metric['value']);
+        $statNote = $metric['note'];
+        $statIcon = $metric['icon'];
+        $statTone = $metric['tone'];
+        require __DIR__ . '/views/components/stat-card.php';
+    }
+    ?>
+</section>
+
+<section class="panel" data-reveal>
+    <form class="filter-bar" method="get" action="products.php">
+        <label class="search-field" for="product-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="product-search" name="search" value="<?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search Product ID, model, name or status"></label>
+        <div class="action-row"><button class="button button-secondary" type="submit"><i class="fa-solid fa-filter" aria-hidden="true"></i> Search</button><?php if ($search !== ''): ?><a class="button button-quiet" href="products.php">Clear</a><?php endif; ?></div>
+    </form>
+    <?php if ($productRows === []): ?>
+        <?php $emptyTitle = 'No product records found'; $emptyText = $search !== '' ? 'Try a different Product ID, exact model code or status.' : 'Product records will appear here after registration.'; $emptyIcon = 'fa-cubes-stacked'; require __DIR__ . '/views/components/empty-state.php'; ?>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Product ID</th><th>Product / model</th><th>Family</th><th>Revision</th><th>Manufactured</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($productRows as $product): ?>
                     <tr>
-
-
-                        <!-- PRODUCT ID -->
-
-                        <td>
-
-                            <span class="product-id">
-
-                                <?php
-
-                                echo htmlspecialchars(
-                                    $row['product_id']
-                                );
-
-                                ?>
-
-                            </span>
-
-                        </td>
-
-
-
-                        <!-- PRODUCT NAME -->
-
-                        <td>
-
-                            <?php
-
-                            echo htmlspecialchars(
-                                $row['product_name']
-                            );
-
-                            ?>
-
-                        </td>
-
-
-
-                        <!-- PRODUCT CODE -->
-
-                        <td>
-
-                            <?php
-
-                            echo htmlspecialchars(
-                                $row['product_code']
-                            );
-
-                            ?>
-
-                        </td>
-
-
-
-                        <!-- PRODUCT TYPE -->
-
-                        <td>
-
-                            <?php
-
-                            echo htmlspecialchars(
-                                $row['product_type']
-                            );
-
-                            ?>
-
-                        </td>
-
-
-
-                        <!-- REVISION -->
-
-                        <td>
-
-                            <?php
-
-                            echo htmlspecialchars(
-                                $row['revision']
-                            );
-
-                            ?>
-
-                        </td>
-
-
-
-                        <!-- MANUFACTURING NUMBER -->
-
-                        <td>
-
-                            <?php
-
-                            echo htmlspecialchars(
-                                $row['manufacturing_number']
-                            );
-
-                            ?>
-
-                        </td>
-
-
-
-                        <!-- MANUFACTURING DATE -->
-
-                        <td>
-
-                            <?php
-
-                            echo htmlspecialchars(
-                                $row['manufacturing_date']
-                            );
-
-                            ?>
-
-                        </td>
-
-
-
-                        <!-- STATUS -->
-
-                        <td>
-
-                            <span class="status">
-
-                                <?php
-
-                                echo htmlspecialchars(
-                                    $row['status']
-                                );
-
-                                ?>
-
-                            </span>
-
-                        </td>
-
-
-
-                        <!-- ACTION -->
-
-                        <td>
-
-                            <div class="action-buttons">
-
-
-                                <a
-                                    href="product-details.php?id=<?php echo $row['id']; ?>"
-                                    class="view-btn"
-                                >
-                                    View
-                                </a>
-
-
-                                <a
-                                    href="edit-product.php?id=<?php echo $row['id']; ?>"
-                                    class="edit-btn"
-                                >
-                                    Edit
-                                </a>
-
-
-                            </div>
-
-                        </td>
-
-
+                        <td><span class="table-primary"><?php echo htmlspecialchars((string) $product['product_id'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                        <td><span class="table-primary"><?php echo htmlspecialchars((string) $product['product_name'], ENT_QUOTES, 'UTF-8'); ?></span><span class="table-secondary">Model <?php echo htmlspecialchars((string) $product['product_code'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                        <td><?php echo htmlspecialchars((string) $product['product_type'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td><?php echo htmlspecialchars((string) $product['revision'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td><?php echo htmlspecialchars((string) $product['manufacturing_date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td><?php $badgeLabel = (string) $product['status']; $badgeTone = (string) $product['status']; require __DIR__ . '/views/components/status-badge.php'; ?></td>
+                        <td><div class="action-row"><a class="button button-quiet" href="product-details.php?id=<?php echo (int) $product['id']; ?>" aria-label="View product history"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a><?php if ($canManageProducts): ?><a class="button button-quiet" href="edit-product.php?id=<?php echo (int) $product['id']; ?>" aria-label="Edit product"><i class="fa-solid fa-pen" aria-hidden="true"></i></a><?php endif; ?></div></td>
                     </tr>
-
-
-                <?php endwhile; ?>
-
-
-            <?php else: ?>
-
-
-                <tr>
-
-                    <td
-                        colspan="9"
-                        class="empty"
-                    >
-
-                        <div class="empty-icon">
-                            <i class="fa-solid fa-box-open" aria-hidden="true"></i>
-                        </div>
-
-                        No products found.
-
-                    </td>
-
-                </tr>
-
-
-            <?php endif; ?>
-
-
-            </tbody>
-
-        </table>
-
-
-    </div>
-
-
-</main>
-
-
-</body>
-
-</html>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
+<?php require __DIR__ . '/views/layouts/app_end.php'; ?>

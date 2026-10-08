@@ -9,7 +9,7 @@ require_once __DIR__ . '/controllers/AuthController.php';
 
 app_start_session();
 
-if (!empty($_SESSION['user_id']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+if (!empty($_SESSION['user_id'])) {
     header('Location: dashboard.php', true, 302);
     exit;
 }

@@ -16,5 +16,14 @@ final class AuthMiddleware
             header('Location: login.php', true, 302);
             exit;
         }
+
+        // End abandoned sessions after a workday-length idle window.
+        $lastActivity = (int) ($_SESSION['last_activity'] ?? 0);
+        if ($lastActivity > 0 && time() - $lastActivity > 8 * 60 * 60) {
+            app_logout_session();
+            header('Location: login.php?expired=1', true, 303);
+            exit;
+        }
+        $_SESSION['last_activity'] = time();
     }
 }

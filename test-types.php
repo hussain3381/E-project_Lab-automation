@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/config/security.php";
 app_start_session();
 require_once __DIR__ . "/db.php";
-require_roles(['Administrator', 'Lab Manager']);
+require_page_access(__FILE__);
 
 $message = "";
 $message_type = "";
@@ -88,7 +88,6 @@ if ($user_initials === "") {
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
 <meta charset="UTF-8">
 
@@ -102,23 +101,6 @@ if ($user_initials === "") {
 
 <!-- GOOGLE FONTS -->
 
-<link
-    rel="preconnect"
-    href="https://fonts.googleapis.com"
->
-
-<link
-    rel="preconnect"
-    href="https://fonts.gstatic.com"
-    crossorigin
->
-
-<link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-    rel="stylesheet"
->
-
-
 <link rel="stylesheet" href="assets/css/pages/test-types.css">
 
 </head>
@@ -131,215 +113,7 @@ if ($user_initials === "") {
      SIDEBAR
 ========================= -->
 
-<aside class="sidebar">
-
-
-    <div class="brand">
-
-        <div class="brand-icon">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-        </div>
-
-        <div class="brand-text">
-
-            <strong>
-                LAB AUTOMATION
-            </strong>
-
-            <span>
-                Electrical Testing
-            </span>
-
-        </div>
-
-    </div>
-
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-
-    <nav>
-
-
-        <a
-            href="dashboard.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌂
-            </span>
-
-            Dashboard
-
-        </a>
-
-
-        <a
-            href="products.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ▣
-            </span>
-
-            Products
-
-        </a>
-
-
-        <a
-            href="testing.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◈
-            </span>
-
-            Testing
-
-        </a>
-
-
-        <a
-            href="test-types.php"
-            class="nav-link active"
-        >
-
-            <span class="nav-icon">
-                ◫
-            </span>
-
-            Test Types
-
-        </a>
-
-
-        <a
-            href="search.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌕
-            </span>
-
-            Advanced Search
-
-        </a>
-
-
-            <?php if (($_SESSION['role'] ?? '') === 'Administrator'): ?>
-            <a href="product-test-plan.php" class="nav-link">
-                <span class="nav-icon">✓</span>
-                Product Test Plans
-            </a>
-            <?php endif; ?>
-
-            <a
-                href="reports.php"
-                class="nav-link"
-            >
-
-            <span class="nav-icon">
-                ▤
-            </span>
-
-            Reports
-
-        </a>
-
-
-        <a
-            href="testers.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◎
-            </span>
-
-            Testers
-
-        </a>
-
-
-        <a
-            href="settings.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                <i class="fa-solid fa-gear" aria-hidden="true"></i>
-            </span>
-
-            Settings
-
-        </a>
-
-
-        <a
-            href="logout.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⇥
-            </span>
-
-            Logout
-
-        </a>
-
-
-    </nav>
-
-
-    <!-- USER -->
-
-    <div class="sidebar-bottom">
-
-        <div class="user-box">
-
-            <div class="user-avatar">
-
-                <?php
-                echo htmlspecialchars($user_initials);
-                ?>
-
-            </div>
-
-
-            <div class="user-info">
-
-                <strong>
-
-                    <?php
-                    echo htmlspecialchars($user_name);
-                    ?>
-
-                </strong>
-
-                <span>
-
-                    <?php
-                    echo htmlspecialchars($user_role);
-                    ?>
-
-                </span>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-</aside>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 

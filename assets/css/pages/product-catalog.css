@@ -4,7 +4,7 @@
     padding: 76px 24px 32px;
     background: var(--theme-bg);
     color: var(--theme-text);
-    font-family: system-ui, sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 }
 .catalog-shell { width: min(1180px, 100%); margin: 0 auto; }
 .catalog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
@@ -22,7 +22,7 @@
 .catalog-card label { margin-top: 6px; color: var(--theme-muted); font-size: 12px; font-weight: 700; }
 .catalog-card input, .catalog-card select, .catalog-card textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-bg); color: var(--theme-text); font: inherit; }
 .catalog-card input:focus, .catalog-card select:focus, .catalog-card textarea:focus { outline: 2px solid var(--theme-focus); outline-offset: 1px; }
-.catalog-card button { margin-top: 8px; padding: 11px 14px; border: 0; border-radius: 9px; background: var(--theme-accent); color: var(--theme-accent-text); font: 700 13px/1.2 system-ui, sans-serif; cursor: pointer; }
+.catalog-card button { margin-top: 8px; padding: 11px 14px; border: 0; border-radius: 9px; background: var(--theme-accent); color: var(--theme-accent-text); font: 700 13px/1.2 var(--theme-font-sans, Inter, sans-serif); cursor: pointer; }
 .catalog-card button:hover { filter: brightness(.96); }
 .catalog-table-wrap { overflow-x: auto; margin-top: 20px; border: 1px solid var(--theme-border); border-radius: 10px; }
 .catalog-table-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; }

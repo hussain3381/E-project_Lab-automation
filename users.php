@@ -3,14 +3,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config/security.php';
-require_once __DIR__ . '/models/Database.php';
-
-app_start_session();
-require_roles(['Administrator']);
-require_once __DIR__ . '/middlewares/CsrfMiddleware.php';
-CsrfMiddleware::handlePost();
-
-$conn = Database::connection();
+include __DIR__ . '/db.php';
+require_page_access(__FILE__);
 $message = '';
 $error = '';
 
@@ -42,11 +36,16 @@ if (isset($_POST['add_user'])) {
     $password = (string) ($_POST['password'] ?? '');
     $role = trim((string) ($_POST['role'] ?? ''));
 
-    if ($name === '' || $username === '' || $password === '' || $role === '') {
-        $error = 'Please fill all fields.';
+    if ($name === '' || strlen($name) > 120 || $username === '' || $password === '' || $role === '') {
+        $error = 'Please complete all fields. Name is required and must be 120 characters or fewer.';
+    } elseif (!preg_match('/^[a-zA-Z0-9._-]{3,40}$/', $username)) {
+        $error = 'Username must be 3–40 characters and use letters, numbers, dots, underscores, or hyphens.';
+    } elseif (strlen($password) < 12) {
+        $error = 'Use a password with at least 12 characters.';
     } elseif (!array_key_exists($role, $role_options)) {
         $error = 'Please select one of the registered system roles.';
     } else {
+        $transactionStarted = false;
         try {
             $check = $conn->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
             $check->bind_param('s', $username);
@@ -62,15 +61,36 @@ if (isset($_POST['add_user'])) {
                     throw new RuntimeException('Could not hash the new user password.');
                 }
 
+                // A Tester account and its assigned-staff profile must be created atomically.
+                $conn->begin_transaction();
+                $transactionStarted = true;
                 $statement = $conn->prepare(
                     'INSERT INTO users (name, username, password, role, is_active) VALUES (?, ?, ?, ?, 1)'
                 );
                 $statement->bind_param('ssss', $name, $username, $hashedPassword, $role);
                 $statement->execute();
+                $newUserId = (int) $conn->insert_id;
                 $statement->close();
-                $message = 'User added successfully.';
+
+                if ($role === 'Tester') {
+                    $profile = $conn->prepare(
+                        "INSERT INTO testers (user_id, name, department, designation, is_active) VALUES (?, ?, NULL, 'Lab Tester', 1)"
+                    );
+                    $profile->bind_param('is', $newUserId, $name);
+                    $profile->execute();
+                    $profile->close();
+                }
+
+                $conn->commit();
+                $transactionStarted = false;
+                $message = $role === 'Tester'
+                    ? 'Tester account and linked tester profile created successfully.'
+                    : 'User added successfully.';
             }
         } catch (Throwable $exception) {
+            if ($transactionStarted) {
+                try { $conn->rollback(); } catch (Throwable $rollbackException) { /* Preserve the original error. */ }
+            }
             error_log('User creation failed: ' . $exception->getMessage());
             $error = 'Unable to add the user. Check that the username is unique and try again.';
         }
@@ -146,8 +166,6 @@ $users = $conn->query(
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-
 <meta charset="UTF-8">
 
 <meta
@@ -159,13 +177,6 @@ $users = $conn->query(
 
 
 <!-- GOOGLE FONTS -->
-
-<link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-    rel="stylesheet"
->
-
-
 <link rel="stylesheet" href="assets/css/pages/users.css">
 
 </head>
@@ -178,164 +189,7 @@ $users = $conn->query(
      SIDEBAR
 ===================================================== -->
 
-<aside class="sidebar">
-
-
-    <!-- BRAND -->
-
-    <div class="brand">
-
-        <div class="brand-icon">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-        </div>
-
-        <div>
-
-            <div class="brand-text">
-                LAB AUTOMATION
-            </div>
-
-            <div class="brand-subtitle">
-                Electrical Testing
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- NAV TITLE -->
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-
-    <!-- NAVIGATION -->
-
-    <nav class="nav">
-
-        <a
-            href="dashboard.php"
-            class="nav-link"
-        >
-            <span class="nav-icon">⌂</span>
-            <span>Dashboard</span>
-        </a>
-
-
-        <a
-            href="products.php"
-            class="nav-link"
-        >
-            <span class="nav-icon">▣</span>
-            <span>Products</span>
-        </a>
-
-
-        <a
-            href="testing.php"
-            class="nav-link"
-        >
-            <span class="nav-icon"><i class="fa-solid fa-flask" aria-hidden="true"></i></span>
-            <span>Testing</span>
-        </a>
-
-
-        <a
-            href="test-types.php"
-            class="nav-link"
-        >
-            <span class="nav-icon">◈</span>
-            <span>Test Types</span>
-        </a>
-
-
-        <a
-            href="testing-status.php"
-            class="nav-link"
-        >
-            <span class="nav-icon">◷</span>
-            <span>Testing Status</span>
-        </a>
-
-
-        <a
-            href="search.php"
-            class="nav-link"
-        >
-            <span class="nav-icon">⌕</span>
-            <span>Advanced Search</span>
-        </a>
-
-
-        <a
-            href="reports.php"
-            class="nav-link"
-        >
-            <span class="nav-icon">▤</span>
-            <span>Reports</span>
-        </a>
-
-
-        <a
-            href="testers.php"
-            class="nav-link"
-        >
-            <span class="nav-icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
-            <span>Testers</span>
-        </a>
-
-
-        <a
-            href="settings.php"
-            class="nav-link"
-        >
-            <span class="nav-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
-            <span>Settings</span>
-        </a>
-
-
-        <a
-            href="users.php"
-            class="nav-link active"
-            aria-current="page"
-        >
-            <span class="nav-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
-            <span>Users</span>
-        </a>
-
-        <a
-            href="roles.php"
-            class="nav-link"
-        >
-            <span class="nav-icon">♜</span>
-            <span>Roles &amp; Access</span>
-        </a>
-
-    </nav>
-
-
-    <!-- USER -->
-
-    <div class="sidebar-bottom">
-
-        <div class="user-box">
-
-            <div class="user-avatar">
-                <?php echo htmlspecialchars($current_user_initials, ENT_QUOTES, 'UTF-8'); ?>
-            </div>
-
-            <div class="user-info">
-                <strong><?php echo htmlspecialchars($current_user_name, ENT_QUOTES, 'UTF-8'); ?></strong>
-                <span><?php echo htmlspecialchars($current_user_role, ENT_QUOTES, 'UTF-8'); ?></span>
-            </div>
-
-        </div>
-
-    </div>
-
-</aside>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 
@@ -482,6 +336,7 @@ $users = $conn->query(
                     <input
                         type="text"
                         name="name"
+                        maxlength="120"
                         placeholder="Enter full name"
                         required
                     >
@@ -500,6 +355,9 @@ $users = $conn->query(
                     <input
                         type="text"
                         name="username"
+                        minlength="3"
+                        maxlength="40"
+                        pattern="[A-Za-z0-9._-]+"
                         placeholder="Enter username"
                         required
                     >
@@ -518,7 +376,9 @@ $users = $conn->query(
                     <input
                         type="password"
                         name="password"
-                        placeholder="Enter password"
+                        minlength="12"
+                        autocomplete="new-password"
+                        placeholder="At least 12 characters"
                         required
                     >
 

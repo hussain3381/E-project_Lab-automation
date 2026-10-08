@@ -1,1009 +1,188 @@
 <?php
+// Role-specific workspace landing. The same permission matrix controls route access and navigation.
+declare(strict_types=1);
 
-require_once __DIR__ . "/config/security.php";
-app_start_session();
+require_once __DIR__ . '/config/security.php';
+include __DIR__ . '/db.php';
+require_page_access(__FILE__);
+require_once __DIR__ . '/models/Tester.php';
 
-include "db.php";
+$role = (string) ($_SESSION['role'] ?? 'Tester');
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+$isTester = $role === 'Tester';
+$testerProfile = $isTester ? Tester::findByUserId($conn, $userId) : null;
+$testerId = $testerProfile !== null ? (int) $testerProfile['id'] : 0;
+$testerScope = $isTester && $testerId > 0
+    ? ' WHERE (t.tester_id = ? OR EXISTS (SELECT 1 FROM test_participants AS p WHERE p.test_record_id = t.id AND p.tester_id = ?))'
+    : ($isTester ? ' WHERE 1 = 0' : '');
 
-function dashboard_run_query(mysqli $connection, string $sql): mysqli_result
-{
-    try {
-        $result = mysqli_query($connection, $sql);
-    } catch (mysqli_sql_exception $exception) {
-        error_log('Dashboard query failed: ' . $exception->getMessage());
-        http_response_code(500);
-        exit('Dashboard data could not be loaded. Please try again later.');
-    }
+$countSql = "SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN LOWER(t.status) IN ('pending', 'in progress', 'testing in progress', 'ready for retest') THEN 1 ELSE 0 END) AS open_count,
+    SUM(CASE WHEN UPPER(t.result) = 'PASS' THEN 1 ELSE 0 END) AS pass_count,
+    SUM(CASE WHEN UPPER(t.result) = 'FAIL' THEN 1 ELSE 0 END) AS fail_count,
+    SUM(CASE WHEN UPPER(t.result) IN ('PENDING', '') THEN 1 ELSE 0 END) AS review_count
+    FROM tests AS t{$testerScope}";
+$countStatement = $conn->prepare($countSql);
+if ($isTester && $testerId > 0) {
+    $countStatement->bind_param('ii', $testerId, $testerId);
+}
+$countStatement->execute();
+$counts = $countStatement->get_result()->fetch_assoc() ?: [];
+$countStatement->close();
 
-    if ($result === false) {
-        error_log('Dashboard query failed: ' . mysqli_error($connection));
-        http_response_code(500);
-        exit('Dashboard data could not be loaded. Please try again later.');
-    }
-
-    return $result;
+$totalProducts = 0;
+$productsInRework = 0;
+$cpriReady = 0;
+if (!$isTester) {
+    $productStats = $conn->query("SELECT COUNT(*) AS total,
+        SUM(status = 'Failed - Re-manufacturing') AS rework_count,
+        SUM(cpri_status = 'Ready') AS cpri_count FROM products")->fetch_assoc() ?: [];
+    $totalProducts = (int) ($productStats['total'] ?? 0);
+    $productsInRework = (int) ($productStats['rework_count'] ?? 0);
+    $cpriReady = (int) ($productStats['cpri_count'] ?? 0);
 }
 
-/* =========================================================
-   DASHBOARD DATABASE DATA
-========================================================= */
-
-/* One aggregate query keeps all dashboard counts consistent. */
-$summary_result = dashboard_run_query(
-    $conn,
-    "SELECT
-        (SELECT COUNT(*) FROM products) AS total_products,
-        COUNT(*) AS total_tests,
-        COALESCE(SUM(UPPER(status) = 'COMPLETED'), 0) AS completed_tests,
-        COALESCE(SUM(UPPER(status) = 'PENDING'), 0) AS pending_tests,
-        COALESCE(SUM(UPPER(status) = 'IN PROGRESS'), 0) AS in_progress_tests,
-        COALESCE(SUM(UPPER(result) = 'FAIL'), 0) AS failed_tests
-     FROM tests"
-);
-$summary = mysqli_fetch_assoc($summary_result);
-
-if ($summary === false) {
-    error_log('Dashboard summary query returned no row.');
-    http_response_code(500);
-    exit('Dashboard data could not be loaded. Please try again later.');
+$recentSql = "SELECT t.id, t.test_id, t.product_id, t.result, t.status, t.testing_date,
+        p.product_name, tt.test_name
+    FROM tests AS t
+    LEFT JOIN products AS p ON p.product_id = t.product_id
+    LEFT JOIN test_types AS tt ON tt.id = t.test_type_id
+    {$testerScope}
+    ORDER BY t.testing_date DESC, t.id DESC
+    LIMIT 6";
+$recentStatement = $conn->prepare($recentSql);
+if ($isTester && $testerId > 0) {
+    $recentStatement->bind_param('ii', $testerId, $testerId);
 }
+$recentStatement->execute();
+$recentRows = $recentStatement->get_result()->fetch_all(MYSQLI_ASSOC);
+$recentStatement->close();
 
-$total_products = (int) $summary['total_products'];
-$total_tests = (int) $summary['total_tests'];
-$completed_tests = (int) $summary['completed_tests'];
-$pending_tests = (int) $summary['pending_tests'];
-$in_progress_tests = (int) $summary['in_progress_tests'];
-$failed_tests = (int) $summary['failed_tests'];
+$roleCopy = [
+    'Administrator' => ['eyebrow' => 'SYSTEM CONTROL', 'title' => 'Your lab, at a glance', 'description' => 'Manage accounts and configuration while keeping the full laboratory workflow in view.'],
+    'Lab Manager' => ['eyebrow' => 'OPERATIONS', 'title' => 'Keep the lab moving', 'description' => 'Track product intake, test progress, staff setup and controlled quality workflow.'],
+    'Tester' => ['eyebrow' => 'MY WORKSPACE', 'title' => 'Your assigned test work', 'description' => 'Review your assigned tests, record results and follow the history for your lab work.'],
+    'Quality Control' => ['eyebrow' => 'QUALITY REVIEW', 'title' => 'Review the quality queue', 'description' => 'Focus on pending outcomes, failures and products eligible for the next controlled workflow step.'],
+];
+$copy = $roleCopy[$role] ?? $roleCopy['Tester'];
+$pageTitle = $copy['title'];
+$pageEyebrow = $copy['eyebrow'];
+$pageDescription = $copy['description'];
+$pageActionHtml = app_can_access_route('new-test.php')
+    ? '<a class="button button-primary" href="new-test.php"><i class="fa-solid fa-plus" aria-hidden="true"></i> Record a test</a>'
+    : '<a class="button button-secondary" href="testing.php"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i> Open review queue</a>';
+require __DIR__ . '/views/layouts/app_start.php';
 
+$totalTests = (int) ($counts['total'] ?? 0);
+$openTests = (int) ($counts['open_count'] ?? 0);
+$passedTests = (int) ($counts['pass_count'] ?? 0);
+$failedTests = (int) ($counts['fail_count'] ?? 0);
+$reviewTests = (int) ($counts['review_count'] ?? 0);
 
-/* =========================================================
-   RECENT TESTING ACTIVITY
-========================================================= */
-
-$recent_tests = dashboard_run_query(
-    $conn,
-    "SELECT
-        tests.id,
-        tests.test_id,
-        tests.product_id,
-        tests.result,
-        tests.status,
-        products.product_name,
-        test_types.test_name
-     
-     FROM tests
-
-     LEFT JOIN products
-        ON tests.product_id = products.product_id
-
-     LEFT JOIN test_types
-        ON tests.test_type_id = test_types.id
-
-     ORDER BY tests.id DESC
-
-     LIMIT 4"
-);
-
-
-/* Failed is a test result, not a workflow status, so it is not part of this breakdown. */
-$pending_percentage = $total_tests > 0
-    ? (int) round(($pending_tests / $total_tests) * 100)
-    : 0;
-$in_progress_percentage = $total_tests > 0
-    ? (int) round(($in_progress_tests / $total_tests) * 100)
-    : 0;
-$completed_percentage = $total_tests > 0
-    ? (int) round(($completed_tests / $total_tests) * 100)
-    : 0;
-
-
-/* =========================================================
-   USER INFORMATION
-========================================================= */
-
-$user_name = $_SESSION['name'] ?? 'Administrator';
-$user_role = $_SESSION['role'] ?? 'Lab Manager';
-$is_admin = $user_role === 'Administrator';
-$can_manage_lab = in_array($user_role, ['Administrator', 'Lab Manager'], true);
-$can_manage_workflow = in_array($user_role, ['Administrator', 'Lab Manager', 'Quality Control'], true);
-
-/* User initials */
-
-$name_parts = explode(" ", trim($user_name));
-
-$user_initials = "";
-
-foreach ($name_parts as $part) {
-
-    if ($part != "") {
-
-        $user_initials .= strtoupper(
-            substr($part, 0, 1)
-        );
-    }
-
-    if (strlen($user_initials) >= 2) {
-        break;
-    }
+if ($role === 'Tester') {
+    $metrics = [
+        ['label' => 'Assigned tests', 'value' => $totalTests, 'note' => 'Tests linked to your profile', 'icon' => 'fa-flask-vial', 'tone' => 'var(--theme-accent)'],
+        ['label' => 'Open work', 'value' => $openTests, 'note' => 'Pending or in progress', 'icon' => 'fa-hourglass-half', 'tone' => 'var(--theme-warning)'],
+        ['label' => 'Passed', 'value' => $passedTests, 'note' => 'Completed successfully', 'icon' => 'fa-circle-check', 'tone' => 'var(--theme-success)'],
+        ['label' => 'Failed', 'value' => $failedTests, 'note' => 'Needs manager review', 'icon' => 'fa-triangle-exclamation', 'tone' => 'var(--theme-danger)'],
+    ];
+} elseif ($role === 'Quality Control') {
+    $metrics = [
+        ['label' => 'Review queue', 'value' => $reviewTests, 'note' => 'Pending result decisions', 'icon' => 'fa-clipboard-list', 'tone' => 'var(--theme-warning)'],
+        ['label' => 'Failed tests', 'value' => $failedTests, 'note' => 'Check re-manufacture routing', 'icon' => 'fa-triangle-exclamation', 'tone' => 'var(--theme-danger)'],
+        ['label' => 'CPRI ready', 'value' => $cpriReady, 'note' => 'Manual handoff eligible', 'icon' => 'fa-arrow-up-right-from-square', 'tone' => 'var(--theme-info)'],
+        ['label' => 'Products in rework', 'value' => $productsInRework, 'note' => 'Re-manufacture workflow', 'icon' => 'fa-arrows-rotate', 'tone' => 'var(--theme-warning)'],
+    ];
+} else {
+    $metrics = [
+        ['label' => 'Products', 'value' => $totalProducts, 'note' => 'Registered product records', 'icon' => 'fa-cubes-stacked', 'tone' => 'var(--theme-accent)'],
+        ['label' => 'Tests in progress', 'value' => $openTests, 'note' => 'Pending or in progress', 'icon' => 'fa-hourglass-half', 'tone' => 'var(--theme-warning)'],
+        ['label' => 'Tests passed', 'value' => $passedTests, 'note' => 'Current recorded outcomes', 'icon' => 'fa-circle-check', 'tone' => 'var(--theme-success)'],
+        ['label' => 'Failed tests', 'value' => $failedTests, 'note' => 'Review rework routing', 'icon' => 'fa-triangle-exclamation', 'tone' => 'var(--theme-danger)'],
+    ];
 }
-
-if ($user_initials == "") {
-    $user_initials = "AD";
-}
-
 ?>
-
-
-<!DOCTYPE html>
-
-<html lang="en">
-
-<head>
-    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
-    <link rel="stylesheet" href="assets/compiled/app.css">
-    <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>Lab Automation | Dashboard</title>
-
-
-    <link
-        rel="preconnect"
-        href="https://fonts.googleapis.com"
-    >
-
-    <link
-        rel="preconnect"
-        href="https://fonts.gstatic.com"
-        crossorigin
-    >
-
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-        rel="stylesheet"
-    >
-
-
-    <link rel="stylesheet" href="assets/css/pages/dashboard.css">
-
-</head>
-
-
-<body>
-
-
-<!-- =========================
-     SIDEBAR
-========================== -->
-
-<aside class="sidebar">
-
-
-    <div class="brand">
-
-        <div class="brand-icon">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-        </div>
-
-        <div class="brand-text">
-
-            <h2>LAB AUTOMATION</h2>
-
-            <p>Electrical Testing</p>
-
-        </div>
-
-    </div>
-
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-
-    <a href="dashboard.php"
-       class="nav-link active"
-       aria-label="Dashboard"
-       title="Dashboard">
-
-        <span class="nav-icon"><i class="fa-solid fa-house" aria-hidden="true"></i></span>
-
-        <span>Dashboard</span>
-
-    </a>
-
-
-    <a href="products.php"
-       class="nav-link"
-       aria-label="Products"
-       title="Products">
-
-        <span class="nav-icon"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i></span>
-
-        <span>Products</span>
-
-    </a>
-
-
-    <a href="testing.php"
-       class="nav-link"
-       aria-label="Testing"
-       title="Testing">
-
-        <span class="nav-icon"><i class="fa-solid fa-flask" aria-hidden="true"></i></span>
-
-        <span>Testing</span>
-
-    </a>
-
-
-    <?php if ($can_manage_lab): ?>
-    <a href="test-types.php" class="nav-link">
-        <span class="nav-icon">◈</span>
-        <span>Test Types</span>
-    </a>
-    <?php endif; ?>
-
-
-    <div class="nav-title">
-        Management
-    </div>
-
-
-    <a href="search.php"
-       class="nav-link"
-       aria-label="Advanced Search"
-       title="Advanced Search">
-
-        <span class="nav-icon"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></span>
-
-        <span>Advanced Search</span>
-
-    </a>
-
-
-    <a href="reports.php"
-       class="nav-link"
-       aria-label="Reports"
-       title="Reports">
-
-        <span class="nav-icon"><i class="fa-solid fa-chart-column" aria-hidden="true"></i></span>
-
-        <span>Reports</span>
-
-    </a>
-
-
-    <?php if ($can_manage_lab): ?>
-    <a href="testers.php" class="nav-link">
-        <span class="nav-icon">♙</span>
-        <span>Testers</span>
-    </a>
-    <a href="departments.php" class="nav-link">
-        <span class="nav-icon">▦</span>
-        <span>Departments</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($is_admin): ?>
-    <a href="product-catalog.php" class="nav-link">
-        <span class="nav-icon">▧</span>
-        <span>Product Catalog</span>
-    </a>
-    <a href="product-test-plan.php" class="nav-link">
-        <span class="nav-icon">☷</span>
-        <span>Family Test Plan</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($can_manage_workflow): ?>
-    <a href="product-workflow.php" class="nav-link">
-        <span class="nav-icon">↻</span>
-        <span>Product Workflow</span>
-    </a>
-    <?php endif; ?>
-
-    <div class="nav-title">
-        System
-    </div>
-
-    <?php if ($is_admin): ?>
-    <a href="users.php" class="nav-link">
-        <span class="nav-icon">♟</span>
-        <span>Users</span>
-    </a>
-    <a href="roles.php" class="nav-link">
-        <span class="nav-icon">♜</span>
-        <span>Roles &amp; Access</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($can_manage_lab): ?>
-    <a href="settings.php" class="nav-link">
-        <span class="nav-icon">⚙</span>
-        <span>Settings</span>
-    </a>
-    <?php endif; ?>
-
-
-    <a href="logout.php"
-       class="nav-link"
-       aria-label="Logout"
-       title="Logout">
-
-        <span class="nav-icon"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></span>
-
-        <span>Logout</span>
-
-    </a>
-
-
-    <div class="sidebar-bottom">
-
-        <div class="user-box">
-
-            <div class="user-avatar">
-
-                <?php
-                echo htmlspecialchars($user_initials);
-                ?>
-
-            </div>
-
-
-            <div class="user-info">
-
-                <strong>
-                    <?php
-                    echo htmlspecialchars($user_name);
-                    ?>
-                </strong>
-
-                <span>
-                    <?php
-                    echo htmlspecialchars($user_role);
-                    ?>
-                </span>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-</aside>
-
-
-<!-- =========================
-     MAIN CONTENT
-========================== -->
-
-<main class="main">
-
-
-    <!-- HEADER -->
-
-    <div class="topbar">
-
-
-        <div class="welcome">
-
-            <small>
-                Laboratory Control Center
-            </small>
-
-            <h1>
-                Dashboard Overview
-            </h1>
-
-            <p>
-                Monitor products, testing activity and laboratory results.
-            </p>
-
-        </div>
-
-
-        <div class="date-box">
-
-            <?php
-            echo date("d F Y");
-            ?>
-
-        </div>
-
-
-    </div>
-
-
-    <!-- =========================
-         STAT CARDS
-    ========================== -->
-
-    <section class="stats">
-
-
-        <!-- TOTAL PRODUCTS -->
-
-        <div class="stat-card">
-
-            <div class="stat-top">
-
-                <span class="stat-title">
-                    Total Products
-                </span>
-
-                <div class="stat-icon">
-                    <i class="fa-solid fa-box" aria-hidden="true"></i>
-                </div>
-
-            </div>
-
-
-            <div class="stat-number">
-
-                <?php
-                echo number_format($total_products);
-                ?>
-
-            </div>
-
-
-            <div class="stat-change">
-
-                <span>Live</span>
-                database records
-
-            </div>
-
-        </div>
-
-
-        <!-- COMPLETED TESTS -->
-
-        <div class="stat-card">
-
-            <div class="stat-top">
-
-                <span class="stat-title">
-                    Tests Completed
-                </span>
-
-                <div class="stat-icon">
-                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
-                </div>
-
-            </div>
-
-
-            <div class="stat-number">
-
-                <?php
-                echo number_format($completed_tests);
-                ?>
-
-            </div>
-
-
-            <div class="stat-change">
-
-                <span>Live</span>
-                testing records
-
-            </div>
-
-        </div>
-
-
-        <!-- PENDING TESTS -->
-
-        <div class="stat-card">
-
-            <div class="stat-top">
-
-                <span class="stat-title">
-                    Pending Tests
-                </span>
-
-                <div class="stat-icon">
-                    <i class="fa-solid fa-clock" aria-hidden="true"></i>
-                </div>
-
-            </div>
-
-
-            <div class="stat-number">
-
-                <?php
-                echo number_format($pending_tests);
-                ?>
-
-            </div>
-
-
-            <div class="stat-change">
-
-                <span>Live</span>
-                requires attention
-
-            </div>
-
-        </div>
-
-
-        <!-- FAILED TESTS -->
-
-        <div class="stat-card">
-
-            <div class="stat-top">
-
-                <span class="stat-title">
-                    Failed Tests
-                </span>
-
-                <div class="stat-icon">
-                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                </div>
-
-            </div>
-
-
-            <div class="stat-number">
-
-                <?php
-                echo number_format($failed_tests);
-                ?>
-
-            </div>
-
-
-            <div class="stat-change">
-
-                <span>Live</span>
-                failed testing records
-
-            </div>
-
-        </div>
-
-
-    </section>
-
-    <?php if ($is_admin): ?>
-    <section class="admin-access-panel" aria-labelledby="admin-access-title">
-        <div>
-            <p class="admin-access-eyebrow">ADMINISTRATION</p>
-            <h2 id="admin-access-title">Users &amp; roles</h2>
-            <p>Create staff logins, assign one of the four approved roles, and review access boundaries.</p>
-        </div>
-        <div class="admin-access-actions">
-            <a href="users.php">Manage users <span aria-hidden="true">→</span></a>
-            <a href="roles.php">View roles <span aria-hidden="true">→</span></a>
+<section class="stats-grid">
+    <?php foreach ($metrics as $metric): ?>
+        <?php
+        $statLabel = $metric['label'];
+        $statValue = number_format((int) $metric['value']);
+        $statNote = $metric['note'];
+        $statIcon = $metric['icon'];
+        $statTone = $metric['tone'];
+        require __DIR__ . '/views/components/stat-card.php';
+        ?>
+    <?php endforeach; ?>
+</section>
+
+<?php if ($isTester && $testerProfile === null): ?>
+    <div class="alert alert-error" role="alert"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> Your login is not linked to a tester profile yet. Ask a Lab Manager to link your account before recording assigned work.</div>
+<?php endif; ?>
+
+<?php if ($role === 'Administrator'): ?>
+    <section class="feature-card mb-4 flex flex-wrap items-center justify-between gap-4" data-reveal>
+        <div><p class="eyebrow">ADMINISTRATION</p><h2 class="m-0 text-xl font-bold text-lab-text">System access and setup</h2><p class="mt-2 text-sm text-lab-muted">Create staff logins, review roles and maintain the catalogue.</p></div>
+        <div class="action-row">
+            <a class="button button-secondary" href="users.php"><i class="fa-solid fa-users-gear" aria-hidden="true"></i> Manage accounts</a>
+            <a class="button button-quiet" href="roles.php"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Roles</a>
+            <a class="button button-quiet" href="product-catalog.php"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Catalog</a>
         </div>
     </section>
-    <?php endif; ?>
+<?php elseif ($role === 'Lab Manager'): ?>
+    <section class="feature-card mb-4 flex flex-wrap items-center justify-between gap-4" data-reveal>
+        <div><p class="eyebrow">DAILY OPERATIONS</p><h2 class="m-0 text-xl font-bold text-lab-text">Operations shortcuts</h2><p class="mt-2 text-sm text-lab-muted">Only the tools enabled for the Lab Manager role are shown.</p></div>
+        <div class="action-row">
+            <a class="button button-secondary" href="add-product.php"><i class="fa-solid fa-cube" aria-hidden="true"></i> Add product</a>
+            <a class="button button-quiet" href="testers.php"><i class="fa-solid fa-user-group" aria-hidden="true"></i> Staff</a>
+            <a class="button button-quiet" href="product-workflow.php"><i class="fa-solid fa-arrows-spin" aria-hidden="true"></i> Workflow</a>
+        </div>
+    </section>
+<?php elseif ($role === 'Quality Control'): ?>
+    <section class="feature-card mb-4 flex flex-wrap items-center justify-between gap-4" data-reveal>
+        <div><p class="eyebrow">QUALITY CONTROL</p><h2 class="m-0 text-xl font-bold text-lab-text">Review before release</h2><p class="mt-2 text-sm text-lab-muted">Failed outcomes remain in the re-manufacture workflow; CPRI handoff is always manual.</p></div>
+        <div class="action-row"><a class="button button-secondary" href="product-workflow.php"><i class="fa-solid fa-arrows-spin" aria-hidden="true"></i> Open quality workflow</a><a class="button button-quiet" href="reports.php"><i class="fa-solid fa-chart-pie" aria-hidden="true"></i> Review reports</a></div>
+    </section>
+<?php else: ?>
+    <section class="feature-card mb-4" data-reveal>
+        <p class="eyebrow">TESTER WORKFLOW</p><h2 class="m-0 text-xl font-bold text-lab-text">Capture results with context</h2>
+        <p class="mt-2 text-sm leading-7 text-lab-muted">Record criteria, expected and actual output, outcome, date and remarks. A failure remains visible for manager review and re-manufacture routing.</p>
+    </section>
+<?php endif; ?>
 
-    <!-- =========================
-         CONTENT
-    ========================== -->
-
-    <section class="content-grid">
-
-
-        <!-- RECENT TESTING -->
-
-        <div class="panel">
-
-
-            <div class="panel-header">
-
-                <h3>
-                    Recent Testing Activity
-                </h3>
-
-
-                <a
-                    href="testing.php"
-                    class="view-all"
-                >
-                    View all <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-                </a>
-
-            </div>
-
-            <div class="table-scroll">
-            <table>
-
-                <thead>
-
-                    <tr>
-
-                        <th>
-                            Test ID
-                        </th>
-
-                        <th>
-                            Product
-                        </th>
-
-                        <th>
-                            Test Type
-                        </th>
-
-                        <th>
-                            Result
-                        </th>
-
-                    </tr>
-
-                </thead>
-
-
-                <tbody>
-
-
-                    <?php
-
-                    if (
-                        $recent_tests &&
-                        mysqli_num_rows($recent_tests) > 0
-                    ):
-
-                        while (
-                            $row =
-                            mysqli_fetch_assoc($recent_tests)
-                        ):
-
-                    ?>
-
+<div class="dashboard-grid">
+    <section class="panel" data-reveal>
+        <header class="panel-header"><div><h2>Recent test activity</h2><p><?php echo $role === 'Tester' ? 'Only records assigned to your linked tester profile.' : 'Latest laboratory records across the current test cycle.'; ?></p></div><a class="button button-quiet" href="testing.php">View all <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a></header>
+        <?php if ($recentRows === []): ?>
+            <?php $emptyTitle = 'No test activity yet'; $emptyText = $role === 'Tester' ? 'When tests are assigned to your profile, they will appear here.' : 'New test records will appear here after the first submission.'; $emptyIcon = 'fa-flask'; require __DIR__ . '/views/components/empty-state.php'; ?>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Test / product</th><th>Test type</th><th>Date</th><th>Outcome</th><th></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($recentRows as $row): ?>
                         <tr>
-
-                            <td>
-
-                                <?php
-                                echo htmlspecialchars(
-                                    $row['test_id']
-                                );
-                                ?>
-
-                            </td>
-
-
-                            <td>
-
-                                <?php
-                                echo htmlspecialchars(
-                                    (string) ($row['product_name'] ?: $row['product_id']),
-                                    ENT_QUOTES,
-                                    'UTF-8'
-                                );
-                                ?>
-
-                            </td>
-
-
-                            <td>
-
-                                <?php
-                                echo htmlspecialchars(
-                                    (string) ($row['test_name'] ?? 'N/A'),
-                                    ENT_QUOTES,
-                                    'UTF-8'
-                                );
-                                ?>
-
-                            </td>
-
-
-                            <td>
-
-
-                                <?php
-
-                                $result =
-                                    strtoupper(
-                                        $row['result'] ?? ''
-                                    );
-
-
-                                if ($result == "PASS") {
-
-                                    echo '<span class="badge pass">
-                                            PASS
-                                          </span>';
-
-                                }
-
-                                elseif ($result == "FAIL") {
-
-                                    echo '<span class="badge fail">
-                                            FAIL
-                                          </span>';
-
-                                }
-
-                                else {
-
-                                    echo '<span class="badge pending">
-                                            PENDING
-                                          </span>';
-                                }
-
-                                ?>
-
-                            </td>
-
+                            <td><span class="table-primary"><?php echo htmlspecialchars((string) $row['test_id'], ENT_QUOTES, 'UTF-8'); ?></span><span class="table-secondary"><?php echo htmlspecialchars((string) $row['product_id'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                            <td><?php echo htmlspecialchars((string) ($row['test_name'] ?? 'Test type'), ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo htmlspecialchars((string) $row['testing_date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php $badgeLabel = (string) $row['result']; $badgeTone = (string) $row['result']; require __DIR__ . '/views/components/status-badge.php'; ?></td>
+                            <td><a class="button button-quiet" href="test-details.php?id=<?php echo (int) $row['id']; ?>" aria-label="View test details"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a></td>
                         </tr>
-
-
-                    <?php
-
-                        endwhile;
-
-                    else:
-
-                    ?>
-
-                        <tr>
-
-                            <td
-                                colspan="4"
-                                style="
-                                    text-align:center;
-                                    color:var(--legacy-color-536a6c);
-                                    padding:30px;
-                                "
-                            >
-
-                                No testing records found.
-
-                            </td>
-
-                        </tr>
-
-
-                    <?php endif; ?>
-
-
-                </tbody>
-
-            </table>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
-
-
-        </div>
-
-
-
-        <!-- TEST STATUS -->
-
-        <div class="panel">
-
-
-            <div class="panel-header">
-
-                <h3>
-                    Testing Status
-                </h3>
-
-                <span class="view-all">
-                    Live
-                </span>
-
-            </div>
-
-
-            <div class="status-list">
-
-
-                <!-- PENDING -->
-
-                <div class="status-item">
-
-                    <div class="status-row">
-
-                        <span>
-                            Pending Testing
-                        </span>
-
-                        <span>
-                            <?php echo number_format($pending_tests); ?> · <?php echo $pending_percentage; ?>%
-                        </span>
-
-                    </div>
-
-
-                    <div class="progress">
-
-                        <div
-                            class="progress-bar"
-                            style="
-                                width:
-                                <?php
-                                echo min(
-                                    $pending_percentage,
-                                    100
-                                );
-                                ?>%;
-                            "
-                        ></div>
-
-                    </div>
-
-                </div>
-
-
-                <!-- IN PROGRESS -->
-
-                <div class="status-item">
-
-                    <div class="status-row">
-
-                        <span>
-                            In Progress
-                        </span>
-
-                        <span>
-                            <?php echo number_format($in_progress_tests); ?> · <?php echo $in_progress_percentage; ?>%
-                        </span>
-
-                    </div>
-
-
-                    <div class="progress">
-
-                        <div
-                            class="progress-bar"
-                            style="
-                                width:
-                                <?php
-                                echo min(
-                                    $in_progress_percentage,
-                                    100
-                                );
-                                ?>%;
-                            "
-                        ></div>
-
-                    </div>
-
-                </div>
-
-
-                <!-- COMPLETED -->
-
-                <div class="status-item">
-
-                    <div class="status-row">
-
-                        <span>
-                            Completed
-                        </span>
-
-                        <span>
-                            <?php echo number_format($completed_tests); ?> · <?php echo $completed_percentage; ?>%
-                        </span>
-
-                    </div>
-
-
-                    <div class="progress">
-
-                        <div
-                            class="progress-bar"
-                            style="
-                                width:
-                                <?php
-                                echo min(
-                                    $completed_percentage,
-                                    100
-                                );
-                                ?>%;
-                            "
-                        ></div>
-
-                    </div>
-
-                </div>
-
-
-            </div>
-
-        </div>
-
-
+        <?php endif; ?>
     </section>
 
-
-
-    <!-- =========================
-         QUICK ACTIONS
-    ========================== -->
-
-    <section class="quick-actions">
-
-
-        <a
-            href="add-product.php"
-            class="action"
-        >
-
-            <div class="action-icon">
-                <i class="fa-solid fa-plus" aria-hidden="true"></i>
-            </div>
-
-
-            <strong>
-                Add New Product
-            </strong>
-
-
-            <span>
-                Register a manufactured product
-            </span>
-
-        </a>
-
-
-
-        <a
-            href="new-test.php"
-            class="action"
-        >
-
-            <div class="action-icon">
-                <i class="fa-solid fa-vial" aria-hidden="true"></i>
-            </div>
-
-
-            <strong>
-                Start New Test
-            </strong>
-
-
-            <span>
-                Create a new testing record
-            </span>
-
-        </a>
-
-
-
-        <a
-            href="search.php"
-            class="action"
-        >
-
-            <div class="action-icon">
-                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-            </div>
-
-
-            <strong>
-                Search Records
-            </strong>
-
-
-            <span>
-                Find products and testing history
-            </span>
-
-        </a>
-
-
-    </section>
-
-
-</main>
-
-
-</body>
-
-</html>
+    <aside class="panel" data-reveal>
+        <header class="panel-header"><div><h2>Your next steps</h2><p>Shortcuts are based on your role.</p></div></header>
+        <div class="panel-body grid gap-3">
+            <?php if (app_can_access_route('new-test.php')): ?><a class="app-nav-link" href="new-test.php"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span>Record a test result</span></a><?php endif; ?>
+            <a class="app-nav-link" href="products.php"><i class="fa-solid fa-cubes-stacked" aria-hidden="true"></i><span>Browse products</span></a>
+            <a class="app-nav-link" href="search.php"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Find a Product ID / Test ID</span></a>
+            <?php if (app_can_access_route('reports.php')): ?><a class="app-nav-link" href="reports.php"><i class="fa-solid fa-chart-line" aria-hidden="true"></i><span>Review reports</span></a><?php endif; ?>
+        </div>
+    </aside>
+</div>
+<?php require __DIR__ . '/views/layouts/app_end.php'; ?>

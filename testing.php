@@ -1,810 +1,166 @@
 <?php
-include "db.php";
+// Searchable role-scoped test history using the shared app shell and the same route policy as navigation.
+declare(strict_types=1);
 
-/* =========================
-   TESTING RECORDS
-========================= */
+require_once __DIR__ . '/config/security.php';
+include __DIR__ . '/db.php';
+require_page_access(__FILE__);
+require_once __DIR__ . '/models/Tester.php';
 
-// Older imported databases may not have the department routing column yet.
-// The migration/import SQL adds it; this fallback keeps the legacy screen usable meanwhile.
-$departmentColumnCheck = mysqli_query(
-    $conn,
-    "SELECT 1 FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'tests'
-       AND COLUMN_NAME = 'department_id'
-     LIMIT 1"
-);
-$hasDepartmentRouting = $departmentColumnCheck && mysqli_num_rows($departmentColumnCheck) > 0;
-$departmentSelect = $hasDepartmentRouting
-    ? 'COALESCE(routed_department.department_name, test_types.department) AS routed_department_name'
-    : 'test_types.department AS routed_department_name';
-$departmentJoin = $hasDepartmentRouting
-    ? 'LEFT JOIN departments AS routed_department ON tests.department_id = routed_department.id'
-    : '';
+$role = (string) ($_SESSION['role'] ?? 'Tester');
+$isTester = $role === 'Tester';
+$testerProfile = $isTester ? Tester::findByUserId($conn, (int) ($_SESSION['user_id'] ?? 0)) : null;
+$testerId = $testerProfile !== null ? (int) $testerProfile['id'] : 0;
+$search = trim((string) ($_GET['search'] ?? ''));
+$statusFilter = trim((string) ($_GET['status'] ?? ''));
+$validStatuses = ['Pending', 'In Progress', 'Completed'];
+if (!in_array($statusFilter, $validStatuses, true)) {
+    $statusFilter = '';
+}
 
-$result = mysqli_query(
-    $conn,
-    "SELECT
-        tests.*,
-        products.product_name,
-        test_types.test_name,
-        {$departmentSelect},
-        COALESCE((
-            SELECT GROUP_CONCAT(DISTINCT participant.name ORDER BY participant.name SEPARATOR ', ')
-            FROM test_participants AS participation
-            INNER JOIN testers AS participant ON participant.id = participation.tester_id
-            WHERE participation.test_record_id = tests.id
-        ), testers.name, 'Not Assigned') AS tester_names
-     FROM tests
-     LEFT JOIN products ON tests.product_id = products.product_id
-     LEFT JOIN test_types ON tests.test_type_id = test_types.id
-     {$departmentJoin}
-     LEFT JOIN testers ON tests.tester_id = testers.id
-     ORDER BY tests.id DESC"
-);
+$conditions = [];
+$types = '';
+$params = [];
+if ($isTester) {
+    if ($testerId > 0) {
+        $conditions[] = '(t.tester_id = ? OR EXISTS (SELECT 1 FROM test_participants AS mine WHERE mine.test_record_id = t.id AND mine.tester_id = ?))';
+        $types .= 'ii';
+        $params[] = $testerId;
+        $params[] = $testerId;
+    } else {
+        $conditions[] = '1 = 0';
+    }
+}
+if ($search !== '') {
+    $conditions[] = '(t.test_id LIKE ? OR t.product_id LIKE ? OR p.product_name LIKE ? OR tt.test_name LIKE ?)';
+    $like = '%' . $search . '%';
+    $types .= 'ssss';
+    array_push($params, $like, $like, $like, $like);
+}
+if ($statusFilter !== '') {
+    $conditions[] = 't.status = ?';
+    $types .= 's';
+    $params[] = $statusFilter;
+}
+$whereSql = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
 
+$departmentColumn = $conn->query(
+    "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tests' AND COLUMN_NAME = 'department_id' LIMIT 1"
+)->num_rows > 0;
+$departmentSelect = $departmentColumn
+    ? 'COALESCE(d.department_name, tt.department, \'Unassigned\') AS department_name'
+    : 'COALESCE(tt.department, \'Unassigned\') AS department_name';
+$departmentJoin = $departmentColumn ? 'LEFT JOIN departments AS d ON d.id = t.department_id' : '';
 
-/* =========================
-   STATISTICS
-========================= */
+$sql = "SELECT t.id, t.test_id, t.product_id, t.testing_date, t.result, t.status, t.remarks,
+        p.product_name, tt.test_name, {$departmentSelect},
+        COALESCE((SELECT GROUP_CONCAT(DISTINCT person.name ORDER BY person.name SEPARATOR ', ')
+            FROM test_participants AS part
+            INNER JOIN testers AS person ON person.id = part.tester_id
+            WHERE part.test_record_id = t.id), primary_tester.name, 'Not assigned') AS tester_names
+    FROM tests AS t
+    LEFT JOIN products AS p ON p.product_id = t.product_id
+    LEFT JOIN test_types AS tt ON tt.id = t.test_type_id
+    {$departmentJoin}
+    LEFT JOIN testers AS primary_tester ON primary_tester.id = t.tester_id
+    {$whereSql}
+    ORDER BY t.testing_date DESC, t.id DESC
+    LIMIT 250";
+$statement = $conn->prepare($sql);
+if ($types !== '') {
+    $bindArguments = [$types];
+    foreach (array_keys($params) as $index) {
+        $bindArguments[] = &$params[$index];
+    }
+    call_user_func_array([$statement, 'bind_param'], $bindArguments);
+}
+$statement->execute();
+$rows = $statement->get_result()->fetch_all(MYSQLI_ASSOC);
+$statement->close();
 
-$total_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total FROM tests"
-);
+$counts = ['total' => count($rows), 'pending' => 0, 'passed' => 0, 'failed' => 0];
+foreach ($rows as $row) {
+    $resultValue = strtoupper((string) $row['result']);
+    if ($resultValue === 'PASS') {
+        $counts['passed']++;
+    } elseif ($resultValue === 'FAIL') {
+        $counts['failed']++;
+    } else {
+        $counts['pending']++;
+    }
+}
 
-$total_row = mysqli_fetch_assoc($total_query);
-$total_tests = $total_row['total'];
-
-
-$pending_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM tests
-     WHERE status = 'Pending'"
-);
-
-$pending_row = mysqli_fetch_assoc($pending_query);
-$pending_tests = $pending_row['total'];
-
-
-$passed_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM tests
-     WHERE result = 'PASS'"
-);
-
-$passed_row = mysqli_fetch_assoc($passed_query);
-$passed_tests = $passed_row['total'];
-
-
-$failed_query = mysqli_query(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM tests
-     WHERE result = 'FAIL'"
-);
-
-$failed_row = mysqli_fetch_assoc($failed_query);
-$failed_tests = $failed_row['total'];
-
+$pageTitle = 'Testing records';
+$pageEyebrow = $role === 'Quality Control' ? 'QUALITY REVIEW' : ($role === 'Tester' ? 'MY ASSIGNED WORK' : 'LAB OPERATIONS');
+$pageDescription = $role === 'Tester'
+    ? 'Review only test records assigned to your linked tester profile.'
+    : 'Search test IDs and Product IDs, review recorded outcomes and open a traceable detail history.';
+$pageActionHtml = app_can_access_route('new-test.php')
+    ? '<a class="button button-primary" href="new-test.php"><i class="fa-solid fa-plus" aria-hidden="true"></i> Record test</a>'
+    : '<a class="button button-secondary" href="reports.php"><i class="fa-solid fa-chart-pie" aria-hidden="true"></i> Review reports</a>';
+require __DIR__ . '/views/layouts/app_start.php';
 ?>
+<section class="stats-grid">
+    <?php
+    $metrics = [
+        ['label' => 'Records shown', 'value' => $counts['total'], 'note' => 'After current filters', 'icon' => 'fa-flask-vial', 'tone' => 'var(--theme-accent)'],
+        ['label' => 'Pending review', 'value' => $counts['pending'], 'note' => 'No final PASS / FAIL', 'icon' => 'fa-hourglass-half', 'tone' => 'var(--theme-warning)'],
+        ['label' => 'Passed', 'value' => $counts['passed'], 'note' => 'Recorded PASS outcomes', 'icon' => 'fa-circle-check', 'tone' => 'var(--theme-success)'],
+        ['label' => 'Failed', 'value' => $counts['failed'], 'note' => 'Follow re-manufacture workflow', 'icon' => 'fa-triangle-exclamation', 'tone' => 'var(--theme-danger)'],
+    ];
+    foreach ($metrics as $metric) {
+        $statLabel = $metric['label'];
+        $statValue = number_format((int) $metric['value']);
+        $statNote = $metric['note'];
+        $statIcon = $metric['icon'];
+        $statTone = $metric['tone'];
+        require __DIR__ . '/views/components/stat-card.php';
+    }
+    ?>
+</section>
 
-<!DOCTYPE html>
-<html lang="en">
+<?php if ($isTester && $testerProfile === null): ?>
+    <div class="alert alert-error" role="alert">Your login is not linked to a tester profile. Contact a Lab Manager before submitting or reviewing assigned test records.</div>
+<?php endif; ?>
 
-<head>
-    <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
-    <link rel="stylesheet" href="assets/compiled/app.css">
-    <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>Testing | Lab Automation</title>
-
-
-<!-- GOOGLE FONTS -->
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-<link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-    rel="stylesheet"
->
-
-
-<link rel="stylesheet" href="assets/css/pages/testing.css">
-
-</head>
-
-
-<body>
-
-
-<!-- =========================
-     SIDEBAR
-========================= -->
-
-<aside class="sidebar">
-
-
-    <!-- BRAND -->
-
-    <div class="brand">
-
-        <div class="brand-icon">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+<section class="panel" data-reveal>
+    <form class="filter-bar" method="get" action="testing.php">
+        <label class="search-field" for="test-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="test-search" name="search" value="<?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search Test ID, Product ID, product or test type"></label>
+        <div class="action-row">
+            <label class="sr-only" for="status-filter">Filter by status</label>
+            <select class="form-field-select" id="status-filter" name="status">
+                <option value="">All statuses</option>
+                <?php foreach ($validStatuses as $statusOption): ?><option value="<?php echo htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $statusFilter === $statusOption ? ' selected' : ''; ?>><?php echo htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8'); ?></option><?php endforeach; ?>
+            </select>
+            <button class="button button-secondary" type="submit"><i class="fa-solid fa-filter" aria-hidden="true"></i> Apply</button>
+            <?php if ($search !== '' || $statusFilter !== ''): ?><a class="button button-quiet" href="testing.php">Clear</a><?php endif; ?>
         </div>
-
-        <div>
-
-            <div class="brand-text">
-                LAB AUTOMATION
-            </div>
-
-            <div class="brand-subtitle">
-                Electrical Testing
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- NAVIGATION -->
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-
-    <nav>
-
-
-        <a
-            href="dashboard.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌂
-            </span>
-
-            <span>
-                Dashboard
-            </span>
-
-        </a>
-
-
-        <a
-            href="products.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ▣
-            </span>
-
-            <span>
-                Products
-            </span>
-
-        </a>
-
-
-        <a
-            href="testing.php"
-            class="nav-link active"
-        >
-
-            <span class="nav-icon">
-            <i class="fa-solid fa-flask" aria-hidden="true"></i>
-            </span>
-
-            <span>
-                Testing
-            </span>
-
-        </a>
-
-
-        <a
-            href="test-types.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◈
-            </span>
-
-            <span>
-                Test Types
-            </span>
-
-        </a>
-
-
-        <a
-            href="search.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ⌕
-            </span>
-
-            <span>
-                Advanced Search
-            </span>
-
-        </a>
-
-
-        <a
-            href="reports.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ▤
-            </span>
-
-            <span>
-                Reports
-            </span>
-
-        </a>
-
-
-        <a
-            href="testers.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                ◎
-            </span>
-
-            <span>
-                Testers
-            </span>
-
-        </a>
-
-
-        <a
-            href="settings.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                <i class="fa-solid fa-gear" aria-hidden="true"></i>
-            </span>
-
-            <span>
-                Settings
-            </span>
-
-        </a>
-
-
-    </nav>
-
-
-    <!-- SIDEBAR BOTTOM -->
-
-    <div class="sidebar-bottom">
-
-        <div class="user-box">
-
-            <div class="user-avatar">
-                LA
-            </div>
-
-            <div class="user-info">
-
-                <strong>
-                    Lab Administrator
-                </strong>
-
-                <span>
-                    Administrator
-                </span>
-
-            </div>
-
-        </div>
-
-
-        <a
-            href="logout.php"
-            class="nav-link"
-        >
-
-            <span class="nav-icon">
-                <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
-            </span>
-
-            <span>
-                Logout
-            </span>
-
-        </a>
-
-    </div>
-
-
-</aside>
-
-
-
-<!-- =========================
-     MAIN CONTENT
-========================= -->
-
-<main class="main">
-
-
-    <!-- HEADER -->
-
-    <div class="header">
-
-
-        <div class="header-left">
-
-            <small>
-                Laboratory Testing
-            </small>
-
-            <h1>
-                Testing Management
-            </h1>
-
-            <p>
-                Manage laboratory testing records and results.
-            </p>
-
-        </div>
-
-
-        <a
-            href="new-test.php"
-            class="new-test-btn"
-        >
-
-            <span>
-                +
-            </span>
-
-            Start New Test
-
-        </a>
-
-
-    </div>
-
-
-
-    <!-- =========================
-         STATISTICS
-    ========================= -->
-
-    <div class="stats">
-
-
-        <!-- TOTAL -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                TOTAL TESTS
-            </div>
-
-            <div class="stat-number">
-                <?php echo $total_tests; ?>
-            </div>
-
-            <div class="stat-small">
-                Laboratory Records
-            </div>
-
-        </div>
-
-
-        <!-- PENDING -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                PENDING
-            </div>
-
-            <div class="stat-number">
-                <?php echo $pending_tests; ?>
-            </div>
-
-            <div class="stat-small">
-                Tests Awaiting Result
-            </div>
-
-        </div>
-
-
-        <!-- PASSED -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                PASSED
-            </div>
-
-            <div class="stat-number">
-                <?php echo $passed_tests; ?>
-            </div>
-
-            <div class="stat-small">
-                Successful Tests
-            </div>
-
-        </div>
-
-
-        <!-- FAILED -->
-
-        <div class="stat-card">
-
-            <div class="stat-label">
-                FAILED
-            </div>
-
-            <div class="stat-number">
-                <?php echo $failed_tests; ?>
-            </div>
-
-            <div class="stat-small">
-                Tests Requiring Action
-            </div>
-
-        </div>
-
-
-    </div>
-
-
-
-    <!-- =========================
-         TESTING TABLE
-    ========================= -->
-
-    <div class="table-box">
-
-
-        <div class="table-header">
-
-            <div>
-
-                <h2>
-                    Testing Records
-                </h2>
-
-                <p>
-                    Complete laboratory testing history.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div class="table-scroll">
-
-
-            <table>
-
-
-                <thead>
-
-                    <tr>
-
-                        <th>
-                            Test ID
-                        </th>
-
-                        <th>
-                            Product ID
-                        </th>
-
-                        <th>
-                            Product
-                        </th>
-
-                        <th>
-                            Test Type
-                        </th>
-
-                        <th>
-                            Department
-                        </th>
-
-                        <th>
-                            Cycle
-                        </th>
-
-                        <th>
-                            Tester(s)
-                        </th>
-
-                        <th>
-                            Date
-                        </th>
-
-                        <th>
-                            Result
-                        </th>
-
-                        <th>
-                            Status
-                        </th>
-
-                        <th>
-                            Action
-                        </th>
-
-                    </tr>
-
-                </thead>
-
-
+    </form>
+    <?php if ($rows === []): ?>
+        <?php $emptyTitle = 'No matching test records'; $emptyText = $isTester ? 'Assigned tests will appear here once a Lab Manager adds your tester profile.' : 'Try a different search or create the first test record.'; $emptyIcon = 'fa-magnifying-glass'; require __DIR__ . '/views/components/empty-state.php'; ?>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Test / product</th><th>Test type</th><th>Tester(s)</th><th>Department</th><th>Date</th><th>Result</th><th>Status</th><th></th></tr></thead>
                 <tbody>
-
-
-                <?php if ($result && mysqli_num_rows($result) > 0): ?>
-
-
-                    <?php while ($row = mysqli_fetch_assoc($result)): ?>
-
-
-                        <tr>
-
-
-                            <!-- TEST ID -->
-
-                            <td>
-
-                                <span class="test-id">
-
-                                    <?php
-
-                                    echo htmlspecialchars(
-                                        $row['test_id']
-                                    );
-
-                                    ?>
-
-                                </span>
-
-                            </td>
-
-
-                            <!-- PRODUCT ID -->
-
-                            <td>
-
-                                <span class="product-id">
-
-                                    <?php
-
-                                    echo htmlspecialchars(
-                                        $row['product_id']
-                                    );
-
-                                    ?>
-
-                                </span>
-
-                            </td>
-
-
-                            <!-- PRODUCT -->
-
-                            <td>
-
-                                <?php
-
-                                echo htmlspecialchars(
-                                    $row['product_name']
-                                );
-
-                                ?>
-
-                            </td>
-
-
-                            <!-- TEST TYPE -->
-
-                            <td>
-
-                                <?php
-
-                                echo htmlspecialchars(
-                                    $row['test_name']
-                                );
-
-                                ?>
-
-                            </td>
-
-
-                            <!-- ROUTED DEPARTMENT -->
-                            <td><?php echo htmlspecialchars((string) ($row['routed_department_name'] ?? 'Unassigned'), ENT_QUOTES, 'UTF-8'); ?></td>
-
-                            <!-- TEST CYCLE -->
-                            <td><?php echo (int) ($row['cycle_number'] ?? 1); ?></td>
-
-                            <!-- TESTER(S) -->
-                            <td><?php echo htmlspecialchars((string) ($row['tester_names'] ?? 'Not Assigned'), ENT_QUOTES, 'UTF-8'); ?></td>
-
-
-                            <!-- DATE -->
-
-                            <td>
-
-                                <?php
-
-                                echo htmlspecialchars(
-                                    $row['testing_date']
-                                    ?? '-'
-                                );
-
-                                ?>
-
-                            </td>
-
-
-                            <!-- RESULT -->
-
-                            <td>
-
-                                <?php
-
-                                $result_value =
-                                    strtoupper(
-                                        trim(
-                                            $row['result']
-                                            ?? ''
-                                        )
-                                    );
-
-
-                                if ($result_value == 'PASS') {
-
-                                    echo
-                                    '<span class="result-pass">
-                                        PASS
-                                    </span>';
-
-                                }
-
-                                elseif ($result_value == 'FAIL') {
-
-                                    echo
-                                    '<span class="result-fail">
-                                        FAIL
-                                    </span>';
-
-                                }
-
-                                else {
-
-                                    echo
-                                    '<span class="result-pending">
-                                        PENDING
-                                    </span>';
-
-                                }
-
-                                ?>
-
-                            </td>
-
-
-                            <!-- STATUS -->
-
-                            <td>
-
-                                <span class="status">
-
-                                    <?php
-
-                                    echo htmlspecialchars(
-                                        $row['status']
-                                        ?? 'Pending'
-                                    );
-
-                                    ?>
-
-                                </span>
-
-                            </td>
-
-
-                            <!-- ACTION -->
-
-                            <td>
-
-                                <a
-                                    href="test-details.php?id=<?php echo $row['id']; ?>"
-                                    class="view-btn"
-                                >
-                                    View
-                                </a>
-
-                            </td>
-
-
-                        </tr>
-
-
-                    <?php endwhile; ?>
-
-
-                <?php else: ?>
-
-
+                <?php foreach ($rows as $row): ?>
                     <tr>
-
-                        <td
-                            colspan="11"
-                            class="empty"
-                        >
-
-                            <div class="empty-icon">
-                                <i class="fa-solid fa-flask" aria-hidden="true"></i>
-                            </div>
-
-                            No testing records found.
-
-                            <br><br>
-
-                            Start your first laboratory test using
-                            <strong>
-                                Start New Test
-                            </strong>.
-
-                        </td>
-
+                        <td><span class="table-primary"><?php echo htmlspecialchars((string) $row['test_id'], ENT_QUOTES, 'UTF-8'); ?></span><span class="table-secondary"><?php echo htmlspecialchars((string) $row['product_id'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                        <td><span class="table-primary"><?php echo htmlspecialchars((string) ($row['test_name'] ?? 'Test'), ENT_QUOTES, 'UTF-8'); ?></span><span class="table-secondary"><?php echo htmlspecialchars((string) ($row['product_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span></td>
+                        <td><?php echo htmlspecialchars((string) $row['tester_names'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td><?php echo htmlspecialchars((string) $row['department_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td><?php echo htmlspecialchars((string) $row['testing_date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td><?php $badgeLabel = (string) $row['result']; $badgeTone = (string) $row['result']; require __DIR__ . '/views/components/status-badge.php'; ?></td>
+                        <td><?php $badgeLabel = (string) $row['status']; $badgeTone = (string) $row['status']; require __DIR__ . '/views/components/status-badge.php'; ?></td>
+                        <td><div class="action-row">
+                            <?php if ($isTester && strtoupper((string) $row['result']) === 'PENDING' && in_array(strtolower((string) $row['status']), ['pending', 'in progress', 'testing in progress'], true)): ?><a class="button button-primary" href="complete-test.php?id=<?php echo (int) $row['id']; ?>">Record result</a><?php endif; ?>
+                            <a class="button button-quiet" href="test-details.php?id=<?php echo (int) $row['id']; ?>" aria-label="Open test details"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+                        </div></td>
                     </tr>
-
-
-                <?php endif; ?>
-
-
+                <?php endforeach; ?>
                 </tbody>
-
-
             </table>
-
-
         </div>
-
-
-    </div>
-
-
-</main>
-
-
-</body>
-
-</html>
+    <?php endif; ?>
+</section>
+<?php require __DIR__ . '/views/layouts/app_end.php'; ?>

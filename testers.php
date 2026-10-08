@@ -3,7 +3,7 @@
 include "db.php";
 
 // Apply the minimum role boundary for this module.
-require_roles(['Administrator', 'Lab Manager']);
+require_page_access(__FILE__);
 
 $message = "";
 $error = "";
@@ -136,23 +136,12 @@ $testers = mysqli_query(
     <script>/* Apply the saved palette before the browser paints the page. */try{document.documentElement.dataset.theme=localStorage.getItem("lab-theme")||"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
     <link rel="stylesheet" href="assets/compiled/app.css">
     <script type="module" src="assets/compiled/app.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
 <meta charset="UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>Testers | Lab Automation</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-<link
-href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-rel="stylesheet"
->
-
 
 <link rel="stylesheet" href="assets/css/pages/testers.css">
 
@@ -166,136 +155,7 @@ rel="stylesheet"
      SIDEBAR
 ========================= -->
 
-<aside class="sidebar">
-
-    <div class="brand">
-
-        <div class="brand-icon">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-        </div>
-
-        <div class="brand-text">
-
-            <strong>LAB AUTOMATION</strong>
-
-            <span>Electrical Testing</span>
-
-        </div>
-
-    </div>
-
-
-    <div class="nav-title">
-        Main Menu
-    </div>
-
-
-    <nav class="nav">
-
-        <a href="dashboard.php" class="nav-link">
-
-            <span class="nav-icon">⌂</span>
-
-            <span>Dashboard</span>
-
-        </a>
-
-
-        <a href="products.php" class="nav-link">
-
-            <span class="nav-icon">▣</span>
-
-            <span>Products</span>
-
-        </a>
-
-
-        <a href="testing.php" class="nav-link">
-
-            <span class="nav-icon">✓</span>
-
-            <span>Testing</span>
-
-        </a>
-
-
-        <a href="test-types.php" class="nav-link">
-
-            <span class="nav-icon">▤</span>
-
-            <span>Test Types</span>
-
-        </a>
-
-
-        <a href="search.php" class="nav-link">
-
-            <span class="nav-icon">⌕</span>
-
-            <span>Advanced Search</span>
-
-        </a>
-
-
-        <a href="reports.php" class="nav-link">
-
-            <span class="nav-icon">▥</span>
-
-            <span>Reports</span>
-
-        </a>
-
-
-        <a href="testers.php" class="nav-link active">
-
-            <span class="nav-icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
-
-            <span>Testers</span>
-
-        </a>
-
-
-        <a href="settings.php" class="nav-link">
-
-            <span class="nav-icon"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
-
-            <span>Settings</span>
-
-        </a>
-
-
-        <a href="logout.php" class="nav-link">
-
-            <span class="nav-icon"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></span>
-
-            <span>Logout</span>
-
-        </a>
-
-    </nav>
-
-
-    <div class="sidebar-bottom">
-
-        <div class="user-box">
-
-            <div class="user-avatar">
-                LA
-            </div>
-
-            <div class="user-info">
-
-                <strong>Lab Administrator</strong>
-
-                <span>Administrator</span>
-
-            </div>
-
-        </div>
-
-    </div>
-
-</aside>
+<?php require __DIR__ . '/views/layouts/legacy_sidebar.php'; ?>
 
 
 

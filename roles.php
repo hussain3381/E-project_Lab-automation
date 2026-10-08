@@ -4,13 +4,10 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config/security.php';
-require_once __DIR__ . '/models/Database.php';
-
-app_start_session();
-require_roles(['Administrator']);
+include __DIR__ . '/db.php';
+require_page_access(__FILE__);
 
 try {
-    $conn = Database::connection();
     $result = $conn->query(
         'SELECT r.id, r.role_name, r.description, r.is_system, ' .
         'COUNT(u.id) AS user_count, ' .

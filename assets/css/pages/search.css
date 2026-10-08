@@ -16,7 +16,7 @@
 
 body {
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     background:
         radial-gradient(
@@ -107,7 +107,7 @@ body {
 
 .brand-text {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 16px;
 
@@ -348,7 +348,7 @@ body {
 
 .header h1 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 29px;
 
@@ -389,7 +389,7 @@ body {
 
 .search-title {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 18px;
 
@@ -448,7 +448,7 @@ body {
 
     outline: none;
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 12px;
 }
@@ -581,7 +581,7 @@ body {
 
 .results-header h2 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 18px;
 

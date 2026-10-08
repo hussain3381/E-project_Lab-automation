@@ -49,9 +49,11 @@ function migration_ensure_compatibility_columns(mysqli $connection): void
 {
     $columns = [
         'users' => [
+            'email' => 'VARCHAR(190) NULL',
             'is_active' => 'TINYINT(1) NOT NULL DEFAULT 1',
         ],
         'testers' => [
+            'user_id' => 'INT NULL',
             'is_active' => 'TINYINT(1) NOT NULL DEFAULT 1',
         ],
         'products' => [
@@ -117,6 +119,47 @@ function migration_ensure_foreign_key(mysqli $connection, string $constraintName
         $connection->query($alterSql);
         echo "Added foreign key {$constraintName}.\n";
     }
+}
+
+/**
+ * Add unique identity indexes only when legacy data contains no duplicates.
+ */
+function migration_ensure_unique_user_email_index(mysqli $connection): void
+{
+    if (migration_index_exists($connection, 'users', 'uq_users_email')) {
+        return;
+    }
+
+    // Empty legacy placeholders are treated as missing emails, not as duplicate addresses.
+    $connection->query("UPDATE users SET email = NULL WHERE email = ''");
+    $duplicate = $connection->query(
+        'SELECT email, COUNT(*) AS total FROM users WHERE email IS NOT NULL ' .
+        'GROUP BY email HAVING COUNT(*) > 1 LIMIT 1'
+    )->fetch_assoc();
+    if ($duplicate !== null) {
+        throw new RuntimeException('Duplicate user email addresses must be corrected before adding unique user emails.');
+    }
+
+    $connection->query('ALTER TABLE users ADD UNIQUE KEY uq_users_email (email)');
+    echo "Added unique account email index uq_users_email.\n";
+}
+
+function migration_ensure_unique_tester_user_index(mysqli $connection): void
+{
+    if (migration_index_exists($connection, 'testers', 'uq_testers_user_id')) {
+        return;
+    }
+
+    $duplicate = $connection->query(
+        'SELECT user_id, COUNT(*) AS total FROM testers WHERE user_id IS NOT NULL ' .
+        'GROUP BY user_id HAVING COUNT(*) > 1 LIMIT 1'
+    )->fetch_assoc();
+    if ($duplicate !== null) {
+        throw new RuntimeException('A user account is linked to more than one tester profile; fix duplicate testers.user_id values first.');
+    }
+
+    $connection->query('ALTER TABLE testers ADD UNIQUE KEY uq_testers_user_id (user_id)');
+    echo "Added unique tester-account link index uq_testers_user_id.\n";
 }
 
 /**
@@ -226,6 +269,15 @@ try {
 
     // These checks also repair partially upgraded databases without rerunning old SQL files.
     migration_ensure_compatibility_columns($connection);
+    migration_ensure_unique_user_email_index($connection);
+    migration_ensure_unique_tester_user_index($connection);
+    migration_ensure_foreign_key(
+        $connection,
+        'fk_testers_user',
+        'ALTER TABLE testers ADD CONSTRAINT fk_testers_user ' .
+        'FOREIGN KEY (user_id) REFERENCES users (id) ' .
+        'ON UPDATE CASCADE ON DELETE SET NULL'
+    );
     migration_ensure_foreign_key(
         $connection,
         'fk_products_product_code',

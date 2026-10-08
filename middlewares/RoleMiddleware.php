@@ -15,8 +15,7 @@ final class RoleMiddleware
         $userRole = (string) ($_SESSION['role'] ?? '');
         if (!in_array($userRole, $allowedRoles, true)) {
             http_response_code(403);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo 'You do not have permission to access this page.';
+            require APP_ROOT . '/views/errors/403.php';
             exit;
         }
     }

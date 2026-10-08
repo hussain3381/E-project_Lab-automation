@@ -16,7 +16,7 @@
 
 body {
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     background: var(--legacy-color-071014);
 
@@ -96,7 +96,7 @@ body {
 
 .brand-text {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 15px;
 
@@ -352,7 +352,7 @@ body {
 
 .header h1 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 29px;
 
@@ -476,7 +476,7 @@ body {
 
     color: var(--legacy-color-ffffff);
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 28px;
 
@@ -530,7 +530,7 @@ body {
 
 .table-header h2 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 16px;
 
@@ -636,7 +636,7 @@ tbody tr:last-child td {
 
     font-weight: 700;
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     letter-spacing: 0.3px;
 }
@@ -650,7 +650,7 @@ tbody tr:last-child td {
 
     color: var(--legacy-color-9db1b0);
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 10px;
 }

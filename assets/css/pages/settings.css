@@ -19,7 +19,7 @@
 
 body {
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     background:
 
@@ -117,7 +117,7 @@ body {
 
 .brand-text {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 16px;
 
@@ -360,7 +360,7 @@ body {
 
 .topbar h2 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 29px;
 
@@ -435,7 +435,7 @@ body {
 
 .card-title h3 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 18px;
 
@@ -510,7 +510,7 @@ input {
 
     outline: none;
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 12px;
 }
@@ -666,7 +666,7 @@ input::placeholder {
 
 .info-card h4 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 13px;
 

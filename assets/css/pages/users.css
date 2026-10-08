@@ -16,7 +16,7 @@
 
 body {
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     background:
         radial-gradient(
@@ -101,7 +101,7 @@ body {
 
 .brand-text {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 17px;
 
@@ -355,7 +355,7 @@ body {
 
 .topbar h2 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 29px;
 
@@ -455,7 +455,7 @@ body {
 
     margin-top: 8px;
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 29px;
 
@@ -483,7 +483,7 @@ body {
 
 .form-card h3 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 18px;
 
@@ -552,7 +552,7 @@ select {
 
     outline: none;
 
-    font-family: "Inter", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 13px;
 
@@ -649,7 +649,7 @@ select option {
 
 .table-header h3 {
 
-    font-family: "Space Grotesk", sans-serif;
+    font-family: var(--theme-font-sans, Inter, sans-serif);
 
     font-size: 17px;
 

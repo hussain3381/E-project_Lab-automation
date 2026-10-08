@@ -34,11 +34,15 @@ function auth_process_login(mysqli $connection): ?string
     }
 
     session_regenerate_id(true);
+    unset($_SESSION['csrf_token']);
+    csrf_token();
     $_SESSION['user_id'] = (int) $user['id'];
     $_SESSION['name'] = (string) $user['name'];
     $_SESSION['username'] = (string) $user['username'];
+    $_SESSION['email'] = (string) ($user['email'] ?? '');
     $_SESSION['role'] = (string) $user['role'];
     $_SESSION['authenticated_at'] = time();
+    $_SESSION['last_activity'] = time();
 
     header('Location: dashboard.php', true, 303);
     exit;
