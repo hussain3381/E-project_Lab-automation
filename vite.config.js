@@ -9,6 +9,7 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
     configFile: false,
     root: projectRoot,
+    base: './',
     plugins: [tailwindcss()],
     build: {
         outDir: resolve(projectRoot, 'assets/compiled'),

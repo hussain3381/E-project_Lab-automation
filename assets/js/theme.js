@@ -12,7 +12,12 @@
 
         document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
             const nextTheme = selectedTheme === 'dark' ? 'light' : 'dark';
-            button.textContent = selectedTheme === 'dark' ? '☀ Light theme' : '☾ Dark theme';
+            const icon = document.createElement('i');
+            icon.className = selectedTheme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+            icon.setAttribute('aria-hidden', 'true');
+            const label = document.createElement('span');
+            label.textContent = selectedTheme === 'dark' ? 'Light theme' : 'Dark theme';
+            button.replaceChildren(icon, label);
             button.setAttribute('aria-label', `Switch to ${nextTheme} theme`);
             button.setAttribute('aria-pressed', String(selectedTheme === 'light'));
             button.title = `Switch to ${nextTheme} theme`;
