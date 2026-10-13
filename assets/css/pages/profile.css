@@ -1,0 +1,231 @@
+/* Personal profile form aligned to the shared authenticated workspace shell. */
+.profile-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.8fr);
+    align-items: start;
+    gap: 1rem;
+}
+
+.profile-summary {
+    display: grid;
+    justify-items: start;
+    gap: 0.65rem;
+    padding: 1.35rem;
+}
+
+.profile-avatar {
+    display: grid;
+    width: 62px;
+    height: 62px;
+    margin-bottom: 0.4rem;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--theme-accent) 38%, var(--theme-border));
+    border-radius: 19px;
+    color: var(--theme-accent);
+    background: color-mix(in srgb, var(--theme-accent) 9%, var(--theme-surface));
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: -0.05em;
+}
+
+.profile-summary .eyebrow,
+.profile-preferences-heading .eyebrow {
+    margin: 0;
+    color: var(--theme-accent);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.profile-summary h2 {
+    margin: 0;
+    color: var(--theme-text);
+    font-size: 1.13rem;
+    letter-spacing: -0.03em;
+}
+
+.profile-meta {
+    display: grid;
+    width: 100%;
+    gap: 0.7rem;
+    margin: 0.35rem 0 0;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--theme-border);
+}
+
+.profile-meta div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.7rem;
+}
+
+.profile-meta dt,
+.profile-meta dd {
+    margin: 0;
+    font-size: 0.72rem;
+}
+
+.profile-meta dt {
+    color: var(--theme-muted);
+}
+
+.profile-meta dd {
+    color: var(--theme-text);
+    font-weight: 650;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.profile-summary-note {
+    margin: 0.25rem 0 0;
+    color: var(--theme-muted);
+    font-size: 0.72rem;
+    line-height: 1.6;
+}
+
+.profile-form {
+    overflow: hidden;
+}
+
+.profile-form .panel-header .eyebrow {
+    margin: 0 0 0.25rem;
+    color: var(--theme-accent);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.profile-form .panel-header h2 {
+    font-size: 1.02rem;
+}
+
+.profile-form-body {
+    display: grid;
+    gap: 1.35rem;
+}
+
+.profile-divider {
+    height: 1px;
+    background: var(--theme-border);
+}
+
+.profile-preferences-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+
+.profile-preferences-heading h3 {
+    margin: 0.25rem 0 0;
+    color: var(--theme-text);
+    font-size: 0.93rem;
+}
+
+.profile-toggle-list {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.preference-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+    padding: 0.75rem 0.8rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--theme-surface-raised) 26%, var(--theme-surface));
+    cursor: pointer;
+}
+
+.preference-toggle > input {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 17px;
+    margin: 0.12rem 0 0;
+    accent-color: var(--theme-accent);
+}
+
+.preference-toggle span {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.preference-toggle strong {
+    color: var(--theme-text);
+    font-size: 0.76rem;
+}
+
+.preference-toggle small {
+    color: var(--theme-muted);
+    font-size: 0.68rem;
+    line-height: 1.5;
+}
+
+.profile-form-actions {
+    border-radius: 0 0 18px 18px;
+}
+
+.profile-form-actions .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.profile-migration-note {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.profile-migration-note code {
+    color: inherit;
+    font-size: 0.82em;
+}
+
+@media (max-width: 920px) {
+    .profile-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .profile-summary {
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        column-gap: 0.8rem;
+    }
+
+    .profile-avatar {
+        grid-row: span 3;
+        margin: 0;
+    }
+
+    .profile-meta,
+    .profile-summary-note {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 640px) {
+    .profile-form-body .field-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .profile-preferences-heading {
+        align-items: flex-start;
+    }
+
+    .profile-preferences-heading .status-pill {
+        display: none;
+    }
+
+    .profile-form-actions > * {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+.profile-form .optional-mark {
+    margin-left: 0.3rem;
+    color: var(--theme-muted);
+    font-size: 0.67rem;
+    font-weight: 500;
+}

@@ -1,0 +1,106 @@
+.assignment-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+    padding: clamp(1.1rem, 3vw, 1.6rem);
+    border-color: color-mix(in srgb, var(--theme-accent) 35%, var(--theme-border));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 9%, var(--theme-surface)), var(--theme-surface));
+}
+
+.assignment-summary h2 {
+    margin: 0.3rem 0;
+    color: var(--theme-text);
+    font-size: clamp(1.1rem, 2vw, 1.4rem);
+}
+
+.assignment-summary p,
+.assignment-id span,
+.plan-item span {
+    color: var(--theme-muted);
+    font-size: 0.88rem;
+}
+
+.assignment-summary strong,
+.assignment-id strong {
+    color: var(--theme-text);
+}
+
+.assignment-id {
+    display: grid;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+    text-align: right;
+}
+
+.assignment-plan {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.plan-item {
+    min-width: 0;
+}
+
+.plan-item p {
+    margin: 0.55rem 0 0;
+    color: var(--theme-text);
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+}
+
+.completion-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.completion-form .form-field-full {
+    grid-column: 1 / -1;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.completion-form textarea {
+    resize: vertical;
+    min-height: 7rem;
+}
+
+@media (max-width: 640px) {
+    .assignment-summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .assignment-id {
+        text-align: left;
+    }
+
+    .assignment-plan,
+    .completion-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .completion-form .form-field-full {
+        grid-column: auto;
+    }
+
+    .form-actions {
+        justify-content: stretch;
+    }
+
+    .form-actions > * {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+}

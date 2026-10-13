@@ -1,0 +1,71 @@
+@import "tailwindcss";
+@import "@fortawesome/fontawesome-free/css/all.min.css";
+@import "../../assets/css/theme-tokens.css";
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("@fontsource/inter/files/inter-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("@fontsource/inter/files/inter-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("@fontsource/inter/files/inter-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("@fontsource/inter/files/inter-latin-700-normal.woff2") format("woff2");
+}
+@import "./app-shell.css";
+
+@source "../../*.php";
+@source "../../views/**/*.php";
+
+@theme {
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --color-lab-bg: var(--theme-bg);
+    --color-lab-surface: var(--theme-surface);
+    --color-lab-raised: var(--theme-surface-raised);
+    --color-lab-text: var(--theme-text);
+    --color-lab-muted: var(--theme-muted);
+    --color-lab-border: var(--theme-border);
+    --color-lab-accent: var(--theme-accent);
+    --color-lab-success: var(--theme-success);
+    --color-lab-warning: var(--theme-warning);
+    --color-lab-danger: var(--theme-danger);
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: var(--font-sans);
+}
+
+:focus-visible {
+    outline: 3px solid var(--theme-focus);
+    outline-offset: 3px;
+}
+
+::selection {
+    color: var(--theme-accent-text);
+    background: var(--theme-accent);
+}

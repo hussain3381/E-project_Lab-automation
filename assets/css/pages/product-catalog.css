@@ -1,0 +1,156 @@
+/* Product catalog page styles use shared theme variables only. */
+.catalog-page {
+    min-height: 100vh;
+    padding: 76px 24px 32px;
+    background: var(--theme-bg);
+    color: var(--theme-text);
+    font-family: var(--theme-font-sans, Inter, sans-serif);
+}
+.catalog-shell { width: min(1180px, 100%); margin: 0 auto; }
+.catalog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.catalog-eyebrow { margin: 0 0 8px; color: var(--theme-accent); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.catalog-header h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.03em; }
+.catalog-lede, .catalog-muted { color: var(--theme-muted); line-height: 1.55; }
+.catalog-lede { max-width: 680px; margin: 9px 0 0; }
+.catalog-link { color: var(--theme-accent); font-weight: 700; text-decoration: none; }
+.catalog-link:hover { text-decoration: underline; }
+.catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.catalog-card { padding: 22px; border: 1px solid var(--theme-border); border-radius: 18px; background: var(--theme-surface); box-shadow: 0 14px 32px var(--theme-shadow); }
+.catalog-card h2 { margin: 0; font-size: 20px; }
+.catalog-muted { min-height: 44px; margin: 8px 0 18px; font-size: 13px; }
+.catalog-card form { display: grid; gap: 9px; }
+.catalog-card label { margin-top: 6px; color: var(--theme-muted); font-size: 12px; font-weight: 700; }
+.catalog-card input, .catalog-card select, .catalog-card textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-bg); color: var(--theme-text); font: inherit; }
+.catalog-card input:focus, .catalog-card select:focus, .catalog-card textarea:focus { outline: 2px solid var(--theme-focus); outline-offset: 1px; }
+.catalog-card button { margin-top: 8px; padding: 11px 14px; border: 0; border-radius: 9px; background: var(--theme-accent); color: var(--theme-accent-text); font: 700 13px/1.2 var(--theme-font-sans, Inter, sans-serif); cursor: pointer; }
+.catalog-card button:hover { filter: brightness(.96); }
+.catalog-table-wrap { overflow-x: auto; margin-top: 20px; border: 1px solid var(--theme-border); border-radius: 10px; }
+.catalog-table-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.catalog-table-wrap th, .catalog-table-wrap td { padding: 10px 11px; border-bottom: 1px solid var(--theme-border); text-align: left; }
+.catalog-table-wrap th { color: var(--theme-accent); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.catalog-table-wrap tr:last-child td { border-bottom: 0; }
+.catalog-alert, .catalog-note { margin: 0 0 16px; padding: 13px 15px; border: 1px solid var(--theme-border); border-radius: 11px; background: var(--theme-surface); }
+.catalog-alert--success { border-color: var(--theme-success); color: var(--theme-success); }
+.catalog-alert--error { border-color: var(--theme-danger); color: var(--theme-danger); }
+.catalog-note { margin-top: 18px; color: var(--theme-muted); line-height: 1.55; }
+.catalog-note strong { color: var(--theme-text); }
+@media (max-width: 800px) { .catalog-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .catalog-page { padding: 66px 14px 20px; } .catalog-header { flex-direction: column; } .catalog-card { padding: 17px; } }
+
+/* Small catalogue refinements: easy scanning, gentle hover feedback, and matching shared-shell spacing. */
+.catalog-shell {
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding: 0.5rem 0 1rem;
+}
+
+.catalog-grid {
+    gap: 1rem;
+}
+
+.catalog-card {
+    position: relative;
+    overflow: hidden;
+    transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.catalog-card::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background: linear-gradient(90deg, var(--theme-accent), color-mix(in srgb, var(--theme-info) 45%, transparent), transparent 75%);
+    opacity: 0.62;
+    content: "";
+}
+
+.catalog-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border));
+}
+
+.catalog-card h2 {
+    color: var(--theme-text);
+    font-size: 1.05rem;
+    letter-spacing: -0.025em;
+}
+
+.catalog-card label {
+    color: var(--theme-text);
+}
+
+.catalog-card input,
+.catalog-card select,
+.catalog-card textarea {
+    min-height: 43px;
+    border-radius: 11px;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.catalog-card textarea {
+    min-height: 88px;
+}
+
+.catalog-card input:focus,
+.catalog-card select:focus,
+.catalog-card textarea:focus {
+    outline: none;
+    border-color: var(--theme-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent) 14%, transparent);
+}
+
+.catalog-card button {
+    min-height: 43px;
+    border-radius: 11px;
+    transition: transform 150ms ease, filter 150ms ease, box-shadow 150ms ease;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--theme-accent) 12%, transparent);
+}
+
+.catalog-card button:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.02);
+}
+
+.catalog-table-wrap {
+    max-height: 260px;
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--theme-bg) 28%, var(--theme-surface));
+}
+
+.catalog-table-wrap table {
+    font-size: 0.73rem;
+}
+
+.catalog-table-wrap th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--theme-surface-raised);
+}
+
+.catalog-table-wrap tbody tr {
+    transition: background 140ms ease;
+}
+
+.catalog-table-wrap tbody tr:hover {
+    background: color-mix(in srgb, var(--theme-accent) 5%, transparent);
+}
+
+.catalog-alert,
+.catalog-note {
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--theme-surface) 92%, transparent);
+}
+
+.catalog-note {
+    margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .catalog-card,
+    .catalog-card input,
+    .catalog-card select,
+    .catalog-card textarea,
+    .catalog-card button {
+        transition: none;
+    }
+}

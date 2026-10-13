@@ -1,0 +1,309 @@
+/* Shared polished status and report views built on the authenticated app shell. */
+.status-metric-grid,
+.report-metric-grid {
+    margin-bottom: 1rem;
+}
+
+.status-overview-panel,
+.status-records-panel,
+.report-pass-panel,
+.report-workflow-panel,
+.report-breakdown-panel,
+.report-recent-panel {
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.status-overview-panel .panel-header .eyebrow,
+.status-records-panel .panel-header .eyebrow,
+.report-pass-panel .panel-header .eyebrow,
+.report-workflow-panel .panel-header .eyebrow,
+.report-breakdown-panel .panel-header .eyebrow,
+.report-recent-panel .panel-header .eyebrow {
+    margin: 0 0 0.25rem;
+    color: var(--theme-accent);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.status-overview-body {
+    display: grid;
+    gap: 1rem;
+}
+
+.status-progress-row {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.status-progress-meta,
+.report-state-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--theme-muted);
+    font-size: 0.76rem;
+}
+
+.status-progress-meta strong,
+.report-state-meta strong {
+    color: var(--theme-text);
+    font-size: 0.76rem;
+    font-weight: 750;
+}
+
+.status-progress-meta small {
+    color: var(--theme-muted);
+    font-size: 0.68rem;
+    font-weight: 500;
+}
+
+.status-progress-track,
+.report-state-track,
+.report-inline-rate > div {
+    height: 9px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--theme-border) 78%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--theme-bg) 84%, var(--theme-surface));
+}
+
+.status-progress-track > span,
+.report-state-track > span,
+.report-inline-rate i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--bar-color, var(--theme-accent));
+    transition: width 520ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.status-progress-track > .is-pending {
+    --bar-color: var(--theme-warning);
+}
+
+.status-progress-track > .is-progress {
+    --bar-color: var(--theme-info);
+}
+
+.status-progress-track > .is-complete {
+    --bar-color: var(--theme-success);
+}
+
+.status-overview-footnote {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding-top: 0.2rem;
+    color: var(--theme-muted);
+    font-size: 0.7rem;
+    line-height: 1.55;
+}
+
+.status-overview-footnote i {
+    margin-top: 0.12rem;
+    color: var(--theme-info);
+}
+
+.status-records-table {
+    min-width: 980px;
+}
+
+.cycle-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.5rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 999px;
+    color: var(--theme-muted);
+    background: color-mix(in srgb, var(--theme-surface-raised) 45%, transparent);
+    font-size: 0.63rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.cycle-pill.is-current {
+    border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border));
+    color: var(--theme-accent);
+    background: color-mix(in srgb, var(--theme-accent) 7%, transparent);
+}
+
+.reports-top-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.reports-top-grid > .panel {
+    margin-bottom: 0;
+}
+
+.report-pass-body {
+    display: grid;
+    min-height: 218px;
+    grid-template-columns: minmax(140px, 0.9fr) minmax(145px, 1fr);
+    align-items: center;
+    gap: 1rem;
+}
+
+.report-rate-ring {
+    display: grid;
+    width: min(100%, 176px);
+    aspect-ratio: 1;
+    place-items: center;
+    margin: auto;
+    border-radius: 50%;
+    background: conic-gradient(var(--theme-success) var(--pass-rate), color-mix(in srgb, var(--theme-border) 72%, transparent) 0);
+    box-shadow: 0 0 28px color-mix(in srgb, var(--theme-success) 8%, transparent);
+}
+
+.report-rate-ring > div {
+    display: grid;
+    width: 76%;
+    aspect-ratio: 1;
+    align-content: center;
+    justify-items: center;
+    border: 1px solid var(--theme-border);
+    border-radius: 50%;
+    background: var(--theme-surface);
+}
+
+.report-rate-ring strong {
+    color: var(--theme-text);
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.065em;
+}
+
+.report-rate-ring span {
+    margin-top: 0.12rem;
+    color: var(--theme-muted);
+    font-size: 0.66rem;
+}
+
+.report-rate-legend {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.report-rate-legend > div {
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--theme-muted);
+    font-size: 0.72rem;
+}
+
+.report-rate-legend strong {
+    color: var(--theme-text);
+    font-size: 0.76rem;
+}
+
+.report-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--theme-accent);
+}
+
+.report-legend-dot.is-pass { background: var(--theme-success); }
+.report-legend-dot.is-fail { background: var(--theme-danger); }
+.report-legend-dot.is-pending { background: var(--theme-warning); }
+
+.report-workflow-list {
+    display: grid;
+    max-height: 285px;
+    gap: 0.85rem;
+    overflow-y: auto;
+}
+
+.report-state-row {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.report-state-meta span {
+    color: var(--theme-muted);
+    font-size: 0.7rem;
+}
+
+.report-state-track {
+    height: 7px;
+}
+
+.report-state-track > span {
+    background: linear-gradient(90deg, var(--theme-accent), color-mix(in srgb, var(--theme-info) 55%, var(--theme-accent)));
+}
+
+.report-inline-rate {
+    display: grid;
+    min-width: 92px;
+    grid-template-columns: auto minmax(38px, 1fr);
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.report-inline-rate > span {
+    color: var(--theme-muted);
+    font-size: 0.67rem;
+}
+
+.report-inline-rate > div {
+    height: 6px;
+}
+
+.report-inline-rate i {
+    background: var(--theme-success);
+}
+
+.reports-disclaimer {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    margin: 0.4rem 0 1rem;
+    color: var(--theme-muted);
+    font-size: 0.7rem;
+    line-height: 1.6;
+}
+
+.reports-disclaimer i {
+    margin-top: 0.1rem;
+    color: var(--theme-info);
+}
+
+@media (max-width: 850px) {
+    .reports-top-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .report-pass-body {
+        min-height: 180px;
+    }
+}
+
+@media (max-width: 560px) {
+    .status-overview-panel .panel-header .status-pill {
+        display: none;
+    }
+
+    .report-pass-body {
+        grid-template-columns: minmax(120px, 0.8fr) minmax(125px, 1fr);
+        gap: 0.7rem;
+    }
+
+    .report-rate-ring {
+        width: min(100%, 145px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .status-progress-track > span,
+    .report-state-track > span,
+    .report-inline-rate i {
+        transition: none;
+    }
+}
